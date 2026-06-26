@@ -1,0 +1,27 @@
+{
+  "name": "alien-intelligence",
+  "version": "1.0.0",
+  "description": "Multi-chain auto-executing on-chain sniper bot — Solana + Base",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon index.js"
+  },
+  "dependencies": {
+    "telegraf": "^4.16.3",
+    "@solana/web3.js": "^1.98.0",
+    "@solana/spl-token": "^0.4.9",
+    "@jup-ag/api": "^6.0.30",
+    "mongoose": "^8.5.1",
+    "axios": "^1.7.2",
+    "dotenv": "^16.4.5",
+    "node-cron": "^3.0.3",
+    "bs58": "^5.0.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.4"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
