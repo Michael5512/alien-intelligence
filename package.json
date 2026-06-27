@@ -1,5 +1,6 @@
 {
   "name": "alien-intelligence",
+  "_cachebust": "1",
   "version": "1.0.0",
   "description": "Multi-chain auto-executing on-chain sniper bot — Solana + Base",
   "main": "index.js",
