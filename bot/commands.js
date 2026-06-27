@@ -285,12 +285,49 @@ function setupCommands(bot) {
     ctx.reply(`❌ Unknown setting key: ${key}`);
   });
 
+  bot.command('devwatch', ownerOnly, async (ctx) => {
+    const args = ctx.message.text.split(' ');
+    const sub = args[1]?.trim();
+    const mint = args[2]?.trim();
+    const autoSell = args[3]?.trim() === 'autosell';
+
+    const { startDevWatch, stopDevWatch, devWatches } = require('../sniper/devwatch');
+
+    if (sub === 'start' && mint) {
+      const pos = activePositions.get(mint);
+      const symbol = pos?.symbol || 'Unknown';
+      await startDevWatch(mint, symbol, (msg) =>
+        ctx.replyWithMarkdown(msg, { disable_web_page_preview: true }), autoSell
+      );
+      return;
+    }
+
+    if (sub === 'stop' && mint) {
+      stopDevWatch(mint);
+      return ctx.reply(`🛑 Dev watch stopped for \`${mint.slice(0, 8)}...\``, { parse_mode: 'Markdown' });
+    }
+
+    if (devWatches.size === 0) {
+      return ctx.reply(
+        '👁️ No active dev watches.\n\n`/devwatch start <mint>` — watch dev wallet\n`/devwatch start <mint> autosell` — auto-sell on move\n`/devwatch stop <mint>` — stop',
+        { parse_mode: 'Markdown' }
+      );
+    }
+
+    const lines = [...devWatches.entries()].map(([m, w]) =>
+      `• *${w.symbol}* — \`${w.devWallet.slice(0, 8)}...\`\n  Balance: ${w.lastBalance?.toLocaleString()} | Auto-sell: ${w.autoSell ? '✅' : '❌'}`
+    );
+    ctx.replyWithMarkdown(`👁️ *Active Dev Watches (${devWatches.size})*\n\n` + lines.join('\n\n'));
+  });
+
   bot.command('admin', ownerOnly, (ctx) => {
+    const { devWatches } = require('../sniper/devwatch');
     ctx.replyWithMarkdown(
       `🛸 *Admin Panel — Phase 1*\n\n` +
       `Auto-snipe: ${autoSnipeEnabled ? '🟢 ON' : '🔴 OFF'}\n` +
       `Watchlist: ${watchlist.size} tokens\n` +
-      `Open positions: ${activePositions.size}\n\n` +
+      `Open positions: ${activePositions.size}\n` +
+      `Dev watches: ${devWatches.size}\n\n` +
       `*Roadmap*\n` +
       `Phase 2: Subscriptions + Access Control\n` +
       `Phase 3: Solana Pay payments\n` +
@@ -298,7 +335,6 @@ function setupCommands(bot) {
       `Phase 5: Public launch`
     );
   });
-
   bot.on('text', ownerOnly, (ctx) => {
     ctx.reply('❓ Unknown command. Try /start for the full command list.');
   });
