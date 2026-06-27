@@ -5,9 +5,11 @@ const cron = require('node-cron');
 const axios = require('axios');
 const CONFIG = require('./utils/config');
 const { setupCommands } = require('./bot/commands');
-const { monitorPosition, activePositions } = require('./sniper/solana');
+const { monitorPosition, activePositions, sellToken } = require('./sniper/solana');
 const { runFilters } = require('./sniper/filters');
+const { checkDevWallets, startDevWatch } = require('./sniper/devwatch');
 
+// ── Validate env ──────────────────────────────────────────────────
 const required = ['TELEGRAM_TOKEN', 'OWNER_TELEGRAM_ID', 'HELIUS_API_KEY', 'OWNER_PRIVATE_KEY'];
 for (const key of required) {
   if (!process.env[key]) {
@@ -16,9 +18,11 @@ for (const key of required) {
   }
 }
 
+// ── Bot init ──────────────────────────────────────────────────────
 const bot = new Telegraf(CONFIG.TELEGRAM_TOKEN);
 const { getAutoSnipeEnabled } = setupCommands(bot);
 
+// ── Notify owner ─────────────────────────────────────────────────
 async function notifyOwner(message) {
   try {
     await bot.telegram.sendMessage(CONFIG.OWNER_TELEGRAM_ID, message, {
@@ -30,15 +34,20 @@ async function notifyOwner(message) {
   }
 }
 
-// TP/SL monitor — every 30s
+// ── TP/SL + Dev Watch monitor — every 30s ────────────────────────
 cron.schedule('*/30 * * * * *', async () => {
-  if (activePositions.size === 0) return;
-  for (const [mint] of activePositions) {
-    await monitorPosition(mint, notifyOwner);
+  // TP/SL
+  if (activePositions.size > 0) {
+    for (const [mint] of activePositions) {
+      await monitorPosition(mint, notifyOwner);
+    }
   }
+
+  // Dev wallet checks
+  await checkDevWallets(activePositions, sellToken);
 });
 
-// Auto-snipe poller — every 60s
+// ── Auto-snipe poller — every 60s ────────────────────────────────
 let seenPairs = new Set();
 
 cron.schedule('*/60 * * * * *', async () => {
@@ -72,7 +81,7 @@ cron.schedule('*/60 * * * * *', async () => {
 
       const { executeSwap } = require('./sniper/solana');
       executeSwap(mint, CONFIG.DEFAULT_FILTERS.buyAmountSol)
-        .then(({ txid, amountOut }) => {
+        .then(async ({ txid, amountOut }) => {
           const entryPrice = parseFloat(data.price);
           activePositions.set(mint, {
             symbol: data.symbol,
@@ -83,11 +92,15 @@ cron.schedule('*/60 * * * * *', async () => {
             boughtAt: Date.now(),
             solSpent: CONFIG.DEFAULT_FILTERS.buyAmountSol,
           });
-          notifyOwner(
+
+          await notifyOwner(
             `✅ *AUTO-SNIPE EXECUTED* — ${data.symbol}\n` +
             `TX: \`${txid}\`\n` +
             `[Solscan](https://solscan.io/tx/${txid})`
           );
+
+          // Start dev watch automatically after every snipe
+          await startDevWatch(mint, data.symbol, notifyOwner, false);
         })
         .catch(err => {
           notifyOwner(`❌ Auto-snipe failed for ${data.symbol}: ${err.message}`);
@@ -103,6 +116,7 @@ cron.schedule('*/60 * * * * *', async () => {
   }
 });
 
+// ── MongoDB connect ───────────────────────────────────────────────
 async function connectDB() {
   if (!CONFIG.MONGODB_URI) {
     console.log('[db] No MONGODB_URI — running in-memory (Phase 1)');
@@ -116,6 +130,7 @@ async function connectDB() {
   }
 }
 
+// ── Launch ────────────────────────────────────────────────────────
 async function main() {
   await connectDB();
 
@@ -123,15 +138,19 @@ async function main() {
 
   console.log(`[boot] ✅ Alien Intelligence — Phase ${CONFIG.PHASE} online`);
   console.log(`[boot] Owner ID: ${CONFIG.OWNER_TELEGRAM_ID}`);
+  console.log(`[boot] TP/SL + Dev Watch monitor: every 30s`);
+  console.log(`[boot] Auto-snipe poller: every 60s (starts OFF)`);
 
   await notifyOwner(
     `👾 *ALIEN INTELLIGENCE — Online*\n\n` +
     `Phase 1 boot complete.\n` +
     `Solana mainnet active 🟢\n` +
+    `Dev wallet tracking active 👁️\n` +
     `Type /start for commands.`
   );
 }
 
+// ── Graceful shutdown ─────────────────────────────────────────────
 process.once('SIGINT', () => { bot.stop('SIGINT'); mongoose.disconnect(); });
 process.once('SIGTERM', () => { bot.stop('SIGTERM'); mongoose.disconnect(); });
 
