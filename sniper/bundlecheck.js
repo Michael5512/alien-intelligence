@@ -2,58 +2,44 @@ const axios = require('axios');
 const CONFIG = require('../utils/config');
 
 /**
- * Detect bundled buys using postTokenBalances
- * Much more accurate than signer detection
+ * Detect bundled buys using Helius enhanced transactions API
+ * More reliable than raw RPC getSignaturesForAddress
  */
 async function detectBundledBuys(mintAddress) {
   try {
-    // Get first 50 signatures for this mint
-    const sigRes = await axios.post(CONFIG.HELIUS_RPC, {
-      jsonrpc: '2.0',
-      id: 'bundle-sigs',
-      method: 'getSignaturesForAddress',
-      params: [mintAddress, { limit: 50 }],
-    });
+    // Use Helius enhanced transactions API
+    const res = await axios.get(
+      `https://api.helius.xyz/v0/addresses/${mintAddress}/transactions?api-key=${CONFIG.HELIUS_API_KEY}&limit=50&type=SWAP`,
+      { timeout: 10000 }
+    );
 
-    const sigs = sigRes.data?.result || [];
-    if (!sigs.length) return { bundled: false, details: null };
+    const txs = res.data || [];
+    if (!txs.length) return { bundled: false, details: null };
 
     // Get earliest transactions (launch window)
-    const earliest = sigs.slice(-15).map(s => s.signature);
+    const earliest = txs.slice(-15);
 
-    // Fetch full transaction details
-    const txRes = await axios.post(CONFIG.HELIUS_RPC, {
-      jsonrpc: '2.0',
-      id: 'bundle-txs',
-      method: 'getTransactions',
-      params: [
-        earliest,
-        { encoding: 'jsonParsed', maxSupportedTransactionVersion: 0 },
-      ],
-    });
-
-    const txs = txRes.data?.result || [];
-
-    // Group unique token recipients by slot using postTokenBalances
+    // Group unique token recipients by slot
     const slotMap = {};
 
-    for (const tx of txs) {
-      if (!tx || !tx.meta) continue;
+    for (const tx of earliest) {
       const slot = tx.slot;
+      if (!slot) continue;
 
-      // Use postTokenBalances to find actual token recipients
-      const recipients = tx.meta.postTokenBalances
-        ?.filter(b =>
-          b.mint === mintAddress &&
-          b.uiTokenAmount?.uiAmount > 0
+      // Use tokenTransfers to find actual recipients
+      const recipients = tx.tokenTransfers
+        ?.filter(t =>
+          t.mint === mintAddress &&
+          t.tokenAmount > 0 &&
+          t.toUserAccount
         )
-        ?.map(b => b.owner) || [];
+        ?.map(t => t.toUserAccount) || [];
 
       if (!slotMap[slot]) slotMap[slot] = new Set();
       recipients.forEach(r => slotMap[slot].add(r));
     }
 
-    // Find peak unique recipients in a single block
+    // Find peak unique recipients in single block
     let maxSameBlock = 0;
     let bundleSlot = null;
 
@@ -64,7 +50,6 @@ async function detectBundledBuys(mintAddress) {
       }
     }
 
-    // 3+ unique wallets receiving tokens in same block = bundle signal
     const bundled = maxSameBlock >= 3;
 
     return {
