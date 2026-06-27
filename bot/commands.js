@@ -7,6 +7,9 @@ const {
   getCurrentPrice,
   activePositions,
 } = require('../sniper/solana');
+const { startDevWatch, stopDevWatch, devWatches } = require('../sniper/devwatch');
+const { scoreToken, formatScore } = require('../sniper/scorer');
+const { getStats, getRecentTrades } = require('../db/tradeHistory');
 
 const watchlist = new Set();
 let autoSnipeEnabled = false;
@@ -21,30 +24,40 @@ function ownerOnly(ctx, next) {
 }
 
 function formatNumber(n) {
-  if (!n) return '0';
+  if (!n) return '$0';
   if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(2)}M`;
   if (n >= 1_000) return `$${(n / 1_000).toFixed(1)}K`;
   return `$${n.toFixed(2)}`;
 }
 
 function setupCommands(bot) {
+
+  // ── /start ────────────────────────────────────────────────────
   bot.command('start', ownerOnly, async (ctx) => {
     await ctx.replyWithMarkdown(
       `👾 *ALIEN INTELLIGENCE* — Online\n\n` +
       `Multi-chain on-chain sniper. Solana live. Base incoming.\n\n` +
-      `*Commands:*\n` +
+      `*Snipe Commands:*\n` +
       `/snipe <mint> — Execute snipe on token\n` +
-      `/analyze <mint> — Analyze token (no buy)\n` +
-      `/autoon — Enable auto-snipe mode\n` +
-      `/autooff — Disable auto-snipe mode\n` +
-      `/watchlist — View / manage watchlist\n` +
-      `/pnl — Open positions & P&L\n` +
-      `/settings — View / edit filter settings\n` +
-      `/admin — Owner admin panel\n\n` +
-      `Phase 1 — Solana mainnet active 🟢`
+      `/analyze <mint> — Full analysis + conviction score\n` +
+      `/autoon — Enable auto-snipe + migration listener\n` +
+      `/autooff — Disable auto-snipe\n\n` +
+      `*Position Commands:*\n` +
+      `/pnl — Open positions & live P&L\n` +
+      `/history — Trade history + win rate\n` +
+      `/watchlist — View / manage watchlist\n\n` +
+      `*Safety Commands:*\n` +
+      `/devwatch — Dev wallet monitor\n\n` +
+      `*Settings:*\n` +
+      `/settings — View filter settings\n` +
+      `/set <key> <value> — Update a setting\n` +
+      `/admin — Admin panel\n\n` +
+      `Phase 1 — Solana mainnet active 🟢\n` +
+      `Migration listener — WebSocket active ⚡`
     );
   });
 
+  // ── /analyze <mint> ──────────────────────────────────────────
   bot.command('analyze', ownerOnly, async (ctx) => {
     const args = ctx.message.text.split(' ');
     const mint = args[1]?.trim();
@@ -62,9 +75,22 @@ function setupCommands(bot) {
         );
       }
 
+      const scoreResult = await scoreToken(mint, {
+        liquidity: data.liquidity,
+        holderCount: data.holderCount,
+        buyRatio: data.buyRatio,
+        tokenAgeSecs: data.tokenAgeSecs,
+        buyTax: data.buyTax,
+        sellTax: data.sellTax,
+        mintAuthorityRevoked: !data.mintAuthority,
+        freezeAuthorityRevoked: !data.freezeAuthority,
+        topHolderPercent: data.topHolderPercent || 0,
+      }, 'safety');
+
       const verdict = pass ? '✅ PASS — Safe to snipe' : '❌ FAIL — Filters triggered';
       const warnText = warnings.length ? '\n⚠️ *Warnings:*\n' + warnings.join('\n') : '';
-      const failText = reasons.length ? '\n🚫 *Failed filters:*\n' + reasons.join('\n') : '';
+      const failText = reasons.length ? '\n🚫 *Failed:*\n' + reasons.join('\n') : '';
+      const scoreText = formatScore(scoreResult);
 
       const text =
         `👾 *Token Analysis*\n\n` +
@@ -80,6 +106,7 @@ function setupCommands(bot) {
         `*Verdict: ${verdict}*` +
         warnText +
         failText +
+        scoreText +
         `\n\n[DexScreener](${data.dexUrl})`;
 
       await ctx.telegram.editMessageText(
@@ -103,6 +130,7 @@ function setupCommands(bot) {
     }
   });
 
+  // ── /snipe <mint> ────────────────────────────────────────────
   bot.command('snipe', ownerOnly, async (ctx) => {
     const args = ctx.message.text.split(' ');
     const mint = args[1]?.trim();
@@ -110,6 +138,7 @@ function setupCommands(bot) {
     await executeSnipe(ctx, mint);
   });
 
+  // Inline button snipe
   bot.action(/^snipe_(.+)$/, ownerOnly, async (ctx) => {
     const mint = ctx.match[1];
     await ctx.answerCbQuery('Executing snipe...');
@@ -121,6 +150,7 @@ function setupCommands(bot) {
 
     try {
       const { pass, reasons, data } = await runFilters(mint, userSettings);
+
       if (!pass) {
         return ctx.telegram.editMessageText(
           ctx.chat.id, msg.message_id, null,
@@ -129,9 +159,22 @@ function setupCommands(bot) {
         );
       }
 
+      const score = await scoreToken(mint, {
+        liquidity: data.liquidity,
+        holderCount: data.holderCount,
+        buyRatio: data.buyRatio,
+        tokenAgeSecs: data.tokenAgeSecs,
+        buyTax: data.buyTax,
+        sellTax: data.sellTax,
+        mintAuthorityRevoked: !data.mintAuthority,
+        freezeAuthorityRevoked: !data.freezeAuthority,
+        topHolderPercent: data.topHolderPercent || 0,
+      }, 'safety');
+
       await ctx.telegram.editMessageText(
         ctx.chat.id, msg.message_id, null,
-        `✅ Filters passed. Sniping ${userSettings.buyAmountSol} SOL → *${data.symbol}*...`,
+        `✅ Filters passed — Conviction: ${score.score}/100 ${score.emoji}\n` +
+        `Sniping ${userSettings.buyAmountSol} SOL → *${data.symbol}*...`,
         { parse_mode: 'Markdown' }
       );
 
@@ -148,12 +191,31 @@ function setupCommands(bot) {
         solSpent: userSettings.buyAmountSol,
       });
 
+      // Log to trade history
+      const { logEntry } = require('../db/tradeHistory');
+      await logEntry({
+        mint,
+        symbol: data.symbol,
+        entryPrice,
+        solSpent: userSettings.buyAmountSol,
+        tokenAmount: amountOut,
+        txidEntry: txid,
+        convictionScore: score.score,
+      });
+
+      // Start dev watch automatically
+      await startDevWatch(mint, data.symbol, async (msg) => {
+        ctx.replyWithMarkdown(msg, { disable_web_page_preview: true });
+      }, false);
+
       await ctx.telegram.editMessageText(
         ctx.chat.id, msg.message_id, null,
         `🟢 *SNIPED* — ${data.symbol}\n\n` +
         `Spent: ${userSettings.buyAmountSol} SOL\n` +
         `Entry: $${entryPrice.toFixed(8)}\n` +
+        `Conviction: ${score.score}/100 ${score.emoji}\n` +
         `TP: +${userSettings.takeProfitPercent}% | SL: -${userSettings.stopLossPercent}%\n` +
+        `Dev watch: 👁️ Active\n` +
         `TX: \`${txid}\`\n\n` +
         `[View on Solscan](https://solscan.io/tx/${txid})`,
         { parse_mode: 'Markdown', disable_web_page_preview: true }
@@ -166,18 +228,25 @@ function setupCommands(bot) {
     }
   }
 
+  // ── /autoon ──────────────────────────────────────────────────
   bot.command('autoon', ownerOnly, (ctx) => {
     autoSnipeEnabled = true;
     ctx.replyWithMarkdown(
-      `🤖 *Auto-snipe ON*\n\nBot will monitor new Solana pairs and auto-snipe when filters pass.\nAmount: ${userSettings.buyAmountSol} SOL per trade.\n\nUse /autooff to stop.`
+      `🤖 *Auto-snipe ON*\n\n` +
+      `Monitoring new Solana pairs every 60s.\n` +
+      `Migration WebSocket listener active ⚡\n` +
+      `Amount per trade: ${userSettings.buyAmountSol} SOL\n\n` +
+      `Use /autooff to stop.`
     );
   });
 
+  // ── /autooff ─────────────────────────────────────────────────
   bot.command('autooff', ownerOnly, (ctx) => {
     autoSnipeEnabled = false;
-    ctx.replyWithMarkdown('🔴 *Auto-snipe OFF*\nMonitoring paused.');
+    ctx.replyWithMarkdown('🔴 *Auto-snipe OFF*\nMonitoring paused. Migration alerts still active.');
   });
 
+  // ── /watchlist ───────────────────────────────────────────────
   bot.command('watchlist', ownerOnly, async (ctx) => {
     const args = ctx.message.text.split(' ');
     const sub = args[1]?.trim();
@@ -185,15 +254,18 @@ function setupCommands(bot) {
 
     if (sub === 'add' && mint) {
       watchlist.add(mint);
-      return ctx.reply(`✅ Added to watchlist: \`${mint}\``, { parse_mode: 'Markdown' });
+      return ctx.reply(`✅ Added: \`${mint}\``, { parse_mode: 'Markdown' });
     }
     if (sub === 'remove' && mint) {
       watchlist.delete(mint);
-      return ctx.reply(`🗑️ Removed from watchlist: \`${mint}\``, { parse_mode: 'Markdown' });
+      return ctx.reply(`🗑️ Removed: \`${mint}\``, { parse_mode: 'Markdown' });
     }
 
     if (watchlist.size === 0) {
-      return ctx.reply('📋 Watchlist is empty.\n\nAdd tokens:\n`/watchlist add <mint>`', { parse_mode: 'Markdown' });
+      return ctx.reply(
+        '📋 Watchlist is empty.\n\n`/watchlist add <mint>`\n`/watchlist remove <mint>`',
+        { parse_mode: 'Markdown' }
+      );
     }
 
     const lines = await Promise.all(
@@ -210,8 +282,11 @@ function setupCommands(bot) {
     );
   });
 
+  // ── /pnl ─────────────────────────────────────────────────────
   bot.command('pnl', ownerOnly, async (ctx) => {
-    if (activePositions.size === 0) return ctx.reply('📊 No open positions.');
+    if (activePositions.size === 0) {
+      return ctx.reply('📊 No open positions.');
+    }
 
     const lines = await Promise.all(
       [...activePositions.entries()].map(async ([mint, pos]) => {
@@ -221,8 +296,9 @@ function setupCommands(bot) {
           : 'N/A';
         const sign = parseFloat(change) >= 0 ? '+' : '';
         const emoji = parseFloat(change) >= 0 ? '🟢' : '🔴';
+        const devWatching = devWatches.has(mint) ? '👁️' : '';
         return (
-          `${emoji} *${pos.symbol}*\n` +
+          `${emoji} *${pos.symbol}* ${devWatching}\n` +
           `  Entry: $${pos.entryPrice?.toFixed(8) || '?'}\n` +
           `  Now: $${currentPrice?.toFixed(8) || '?'}\n` +
           `  PnL: ${sign}${change}%\n` +
@@ -231,9 +307,92 @@ function setupCommands(bot) {
       })
     );
 
-    ctx.replyWithMarkdown(`📊 *Open Positions (${activePositions.size})*\n\n` + lines.join('\n\n'));
+    ctx.replyWithMarkdown(
+      `📊 *Open Positions (${activePositions.size})*\n\n` +
+      lines.join('\n\n')
+    );
   });
 
+  // ── /history ─────────────────────────────────────────────────
+  bot.command('history', ownerOnly, async (ctx) => {
+    const stats = await getStats();
+
+    if (!stats || stats.trades === 0) {
+      return ctx.reply(
+        `📈 *Trade History*\n\nNo closed trades yet.\nOpen positions: ${stats?.open || 0}`,
+        { parse_mode: 'Markdown' }
+      );
+    }
+
+    const recent = await getRecentTrades(5);
+    const recentLines = recent.map(t => {
+      const sign = t.pnlPercent >= 0 ? '+' : '';
+      const emoji = t.pnlPercent >= 0 ? '🟢' : '🔴';
+      return `${emoji} *${t.symbol}* ${sign}${t.pnlPercent?.toFixed(1)}% (${sign}${t.pnlSol?.toFixed(3)} SOL)`;
+    });
+
+    ctx.replyWithMarkdown(
+      `📈 *Trade History*\n\n` +
+      `Total trades: ${stats.trades}\n` +
+      `Open: ${stats.open}\n` +
+      `Win rate: ${stats.winRate}%\n` +
+      `Wins: ${stats.wins} | Losses: ${stats.losses}\n` +
+      `Avg PnL: ${stats.avgPnl}%\n` +
+      `Total PnL: ${stats.totalPnlSol} SOL\n\n` +
+      `🏆 Best: *${stats.bestTrade.symbol}* +${stats.bestTrade.pnl}%\n` +
+      `💀 Worst: *${stats.worstTrade.symbol}* ${stats.worstTrade.pnl}%\n\n` +
+      `*Last 5 trades:*\n` +
+      recentLines.join('\n')
+    );
+  });
+
+  // ── /devwatch ────────────────────────────────────────────────
+  bot.command('devwatch', ownerOnly, async (ctx) => {
+    const args = ctx.message.text.split(' ');
+    const sub = args[1]?.trim();
+    const mint = args[2]?.trim();
+    const autoSell = args[3]?.trim() === 'autosell';
+
+    if (sub === 'start' && mint) {
+      const pos = activePositions.get(mint);
+      const symbol = pos?.symbol || 'Unknown';
+      await startDevWatch(mint, symbol, (msg) =>
+        ctx.replyWithMarkdown(msg, { disable_web_page_preview: true }),
+        autoSell
+      );
+      return;
+    }
+
+    if (sub === 'stop' && mint) {
+      stopDevWatch(mint);
+      return ctx.reply(
+        `🛑 Dev watch stopped for \`${mint.slice(0, 8)}...\``,
+        { parse_mode: 'Markdown' }
+      );
+    }
+
+    if (devWatches.size === 0) {
+      return ctx.reply(
+        `👁️ No active dev watches.\n\n` +
+        `/devwatch start <mint> — watch dev wallet\n` +
+        `/devwatch start <mint> autosell — auto-sell on move\n` +
+        `/devwatch stop <mint> — stop watching`,
+        { parse_mode: 'Markdown' }
+      );
+    }
+
+    const lines = [...devWatches.entries()].map(([m, w]) =>
+      `• *${w.symbol}* — \`${w.devWallet.slice(0, 8)}...${w.devWallet.slice(-6)}\`\n` +
+      `  Balance: ${w.lastBalance?.toLocaleString()} | Auto-sell: ${w.autoSell ? '✅' : '❌'}`
+    );
+
+    ctx.replyWithMarkdown(
+      `👁️ *Active Dev Watches (${devWatches.size})*\n\n` +
+      lines.join('\n\n')
+    );
+  });
+
+  // ── /settings ────────────────────────────────────────────────
   bot.command('settings', ownerOnly, (ctx) => {
     const s = userSettings;
     ctx.replyWithMarkdown(
@@ -253,17 +412,22 @@ function setupCommands(bot) {
       `Buy Amount: ${s.buyAmountSol} SOL\n` +
       `Take Profit: +${s.takeProfitPercent}%\n` +
       `Stop Loss: -${s.stopLossPercent}%\n\n` +
-      `To change:\n\`/set minLiquidity 50000\`\n\`/set buyAmountSol 0.3\`\n\`/set takeProfitPercent 150\``
+      `To change:\n` +
+      `\`/set minLiquidity 50000\`\n` +
+      `\`/set buyAmountSol 0.3\`\n` +
+      `\`/set takeProfitPercent 150\``
     );
   });
 
+  // ── /set <key> <value> ───────────────────────────────────────
   bot.command('set', ownerOnly, (ctx) => {
     const parts = ctx.message.text.split(' ');
     const key = parts[1]?.trim();
     const value = parts[2]?.trim();
 
-    if (!key || value === undefined)
+    if (!key || value === undefined) {
       return ctx.reply('Usage: /set <key> <value>\nExample: /set buyAmountSol 0.5');
+    }
 
     const numericKeys = [
       'minLiquidity', 'maxDevPercent', 'maxTopHolderPercent', 'minHolderCount',
@@ -278,68 +442,41 @@ function setupCommands(bot) {
       userSettings[key] = num;
       return ctx.reply(`✅ ${key} set to ${num}`);
     }
+
     if (boolKeys.includes(key)) {
       userSettings[key] = value === 'true';
       return ctx.reply(`✅ ${key} set to ${value === 'true'}`);
     }
+
     ctx.reply(`❌ Unknown setting key: ${key}`);
   });
 
-  bot.command('devwatch', ownerOnly, async (ctx) => {
-    const args = ctx.message.text.split(' ');
-    const sub = args[1]?.trim();
-    const mint = args[2]?.trim();
-    const autoSell = args[3]?.trim() === 'autosell';
-
-    const { startDevWatch, stopDevWatch, devWatches } = require('../sniper/devwatch');
-
-    if (sub === 'start' && mint) {
-      const pos = activePositions.get(mint);
-      const symbol = pos?.symbol || 'Unknown';
-      await startDevWatch(mint, symbol, (msg) =>
-        ctx.replyWithMarkdown(msg, { disable_web_page_preview: true }), autoSell
-      );
-      return;
-    }
-
-    if (sub === 'stop' && mint) {
-      stopDevWatch(mint);
-      return ctx.reply(`🛑 Dev watch stopped for \`${mint.slice(0, 8)}...\``, { parse_mode: 'Markdown' });
-    }
-
-    if (devWatches.size === 0) {
-      return ctx.reply(
-        '👁️ No active dev watches.\n\n`/devwatch start <mint>` — watch dev wallet\n`/devwatch start <mint> autosell` — auto-sell on move\n`/devwatch stop <mint>` — stop',
-        { parse_mode: 'Markdown' }
-      );
-    }
-
-    const lines = [...devWatches.entries()].map(([m, w]) =>
-      `• *${w.symbol}* — \`${w.devWallet.slice(0, 8)}...\`\n  Balance: ${w.lastBalance?.toLocaleString()} | Auto-sell: ${w.autoSell ? '✅' : '❌'}`
-    );
-    ctx.replyWithMarkdown(`👁️ *Active Dev Watches (${devWatches.size})*\n\n` + lines.join('\n\n'));
-  });
-
+  // ── /admin ───────────────────────────────────────────────────
   bot.command('admin', ownerOnly, (ctx) => {
-    const { devWatches } = require('../sniper/devwatch');
     ctx.replyWithMarkdown(
       `🛸 *Admin Panel — Phase 1*\n\n` +
       `Auto-snipe: ${autoSnipeEnabled ? '🟢 ON' : '🔴 OFF'}\n` +
       `Watchlist: ${watchlist.size} tokens\n` +
       `Open positions: ${activePositions.size}\n` +
-      `Dev watches: ${devWatches.size}\n\n` +
+      `Dev watches: ${devWatches.size}\n` +
+      `Migration listener: ⚡ WebSocket active\n\n` +
       `*Roadmap*\n` +
       `Phase 2: Subscriptions + Access Control\n` +
       `Phase 3: Solana Pay payments\n` +
-      `Phase 4: Multi-chain + whale tracker\n` +
+      `Phase 4: Base chain + whale tracker\n` +
       `Phase 5: Public launch`
     );
   });
+
+  // ── Catch unknown commands ───────────────────────────────────
   bot.on('text', ownerOnly, (ctx) => {
     ctx.reply('❓ Unknown command. Try /start for the full command list.');
   });
 
-  return { getAutoSnipeEnabled: () => autoSnipeEnabled, getWatchlist: () => watchlist };
+  return {
+    getAutoSnipeEnabled: () => autoSnipeEnabled,
+    getWatchlist: () => watchlist,
+  };
 }
 
 module.exports = { setupCommands };
