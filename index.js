@@ -2,12 +2,14 @@ require('dotenv').config();
 const { Telegraf } = require('telegraf');
 const mongoose = require('mongoose');
 const cron = require('node-cron');
-const axios = require('axios');
 const CONFIG = require('./utils/config');
 const { setupCommands } = require('./bot/commands');
 const { monitorPosition, activePositions, sellToken } = require('./sniper/solana');
 const { runFilters } = require('./sniper/filters');
 const { checkDevWallets, startDevWatch } = require('./sniper/devwatch');
+const { startMigrationListener, stopMigrationListener } = require('./sniper/migration');
+const { logEntry, logExit } = require('./db/tradeHistory');
+const { scoreToken } = require('./sniper/scorer');
 
 // ── Validate env ──────────────────────────────────────────────────
 const required = ['TELEGRAM_TOKEN', 'OWNER_TELEGRAM_ID', 'HELIUS_API_KEY', 'OWNER_PRIVATE_KEY'];
@@ -34,16 +36,107 @@ async function notifyOwner(message) {
   }
 }
 
-// ── TP/SL + Dev Watch monitor — every 30s ────────────────────────
-cron.schedule('*/30 * * * * *', async () => {
-  // TP/SL
-  if (activePositions.size > 0) {
-    for (const [mint] of activePositions) {
-      await monitorPosition(mint, notifyOwner);
-    }
+// ── Migration handler ─────────────────────────────────────────────
+async function handleMigration(token) {
+  if (!getAutoSnipeEnabled()) {
+    // Just notify, don't snipe
+    return notifyOwner(
+      `🚀 *MIGRATION DETECTED* — ${token.symbol}\n` +
+      `Auto-snipe is OFF. Use /snipe ${token.mint} to enter.\n` +
+      `[Chart](${token.dexUrl})`
+    );
   }
 
-  // Dev wallet checks
+  await notifyOwner(
+    `🚀 *PUMP.FUN MIGRATION*\n\n` +
+    `*${token.name} (${token.symbol})*\n` +
+    `Liquidity: $${token.liquidity.toLocaleString()}\n` +
+    `[Chart](${token.dexUrl})\n\n` +
+    `⚡ Running filters...`
+  );
+
+  const { pass, data, reasons } = await runFilters(token.mint);
+
+  if (!pass) {
+    return notifyOwner(
+      `❌ ${token.symbol} failed filters\n` +
+      reasons.slice(0, 3).join('\n')
+    );
+  }
+
+  const score = await scoreToken(token.mint, {
+    liquidity: data.liquidity,
+    holderCount: data.holderCount,
+    buyRatio: data.buyRatio,
+    tokenAgeSecs: data.tokenAgeSecs,
+    buyTax: data.buyTax,
+    sellTax: data.sellTax,
+    mintAuthorityRevoked: true,
+    freezeAuthorityRevoked: true,
+    topHolderPercent: 0,
+  }, 'momentum'); // momentum mode for migrations
+
+  await notifyOwner(
+    `✅ Filters passed — ${token.symbol}\n` +
+    `Conviction: ${score.score}/100 ${score.emoji} (Momentum)\n` +
+    `Executing ${CONFIG.DEFAULT_FILTERS.buyAmountSol} SOL snipe...`
+  );
+
+  const { executeSwap } = require('./sniper/solana');
+  executeSwap(token.mint, CONFIG.DEFAULT_FILTERS.buyAmountSol)
+    .then(async ({ txid, amountOut }) => {
+      const entryPrice = parseFloat(token.price) || 0;
+      activePositions.set(token.mint, {
+        symbol: token.symbol,
+        entryPrice,
+        tokenAmount: amountOut,
+        takeProfitPercent: CONFIG.DEFAULT_FILTERS.takeProfitPercent,
+        stopLossPercent: CONFIG.DEFAULT_FILTERS.stopLossPercent,
+        boughtAt: Date.now(),
+        solSpent: CONFIG.DEFAULT_FILTERS.buyAmountSol,
+      });
+
+      await logEntry({
+        mint: token.mint,
+        symbol: token.symbol,
+        entryPrice,
+        solSpent: CONFIG.DEFAULT_FILTERS.buyAmountSol,
+        tokenAmount: amountOut,
+        txidEntry: txid,
+        convictionScore: score.score,
+      });
+
+      await startDevWatch(token.mint, token.symbol, notifyOwner, false);
+
+      notifyOwner(
+        `🟢 *MIGRATION SNIPE DONE* — ${token.symbol}\n` +
+        `TX: \`${txid}\`\n` +
+        `[Solscan](https://solscan.io/tx/${txid})`
+      );
+    })
+    .catch(err => {
+      notifyOwner(`❌ Migration snipe failed: ${err.message}`);
+    });
+}
+
+// ── TP/SL + Dev Watch — every 30s ────────────────────────────────
+cron.schedule('*/30 * * * * *', async () => {
+  if (activePositions.size > 0) {
+    for (const [mint] of activePositions) {
+      await monitorPosition(mint, async (msg, exitData) => {
+        notifyOwner(msg);
+        if (exitData) {
+          await logExit({
+            mint,
+            exitPrice: exitData.exitPrice,
+            solReturned: exitData.solReturned,
+            exitReason: exitData.reason,
+            txidExit: exitData.txid,
+          });
+        }
+      });
+    }
+  }
   await checkDevWallets(activePositions, sellToken);
 });
 
@@ -54,6 +147,7 @@ cron.schedule('*/60 * * * * *', async () => {
   if (!getAutoSnipeEnabled()) return;
 
   try {
+    const axios = require('axios');
     const res = await axios.get(
       'https://api.dexscreener.com/latest/dex/pairs/solana',
       { timeout: 8000 }
@@ -71,12 +165,25 @@ cron.schedule('*/60 * * * * *', async () => {
       const { pass, data } = await runFilters(mint);
       if (!pass) continue;
 
+      const score = await scoreToken(mint, {
+        liquidity: data.liquidity,
+        holderCount: data.holderCount,
+        buyRatio: data.buyRatio,
+        tokenAgeSecs: data.tokenAgeSecs,
+        buyTax: data.buyTax,
+        sellTax: data.sellTax,
+        mintAuthorityRevoked: true,
+        freezeAuthorityRevoked: true,
+        topHolderPercent: 0,
+      }, 'safety');
+
       await notifyOwner(
         `🛸 *AUTO-SNIPE TRIGGERED*\n\n` +
         `*${data.name} (${data.symbol})*\n` +
         `Price: $${parseFloat(data.price).toFixed(8)}\n` +
         `Liquidity: $${data.liquidity.toLocaleString()}\n` +
-        `Executing snipe for ${CONFIG.DEFAULT_FILTERS.buyAmountSol} SOL...`
+        `Conviction: ${score.score}/100 ${score.emoji}\n` +
+        `Executing ${CONFIG.DEFAULT_FILTERS.buyAmountSol} SOL...`
       );
 
       const { executeSwap } = require('./sniper/solana');
@@ -93,17 +200,26 @@ cron.schedule('*/60 * * * * *', async () => {
             solSpent: CONFIG.DEFAULT_FILTERS.buyAmountSol,
           });
 
-          await notifyOwner(
-            `✅ *AUTO-SNIPE EXECUTED* — ${data.symbol}\n` +
+          await logEntry({
+            mint,
+            symbol: data.symbol,
+            entryPrice,
+            solSpent: CONFIG.DEFAULT_FILTERS.buyAmountSol,
+            tokenAmount: amountOut,
+            txidEntry: txid,
+            convictionScore: score.score,
+          });
+
+          await startDevWatch(mint, data.symbol, notifyOwner, false);
+
+          notifyOwner(
+            `✅ *SNIPED* — ${data.symbol}\n` +
             `TX: \`${txid}\`\n` +
             `[Solscan](https://solscan.io/tx/${txid})`
           );
-
-          // Start dev watch automatically after every snipe
-          await startDevWatch(mint, data.symbol, notifyOwner, false);
         })
         .catch(err => {
-          notifyOwner(`❌ Auto-snipe failed for ${data.symbol}: ${err.message}`);
+          notifyOwner(`❌ Auto-snipe failed: ${err.message}`);
         });
     }
 
@@ -116,7 +232,7 @@ cron.schedule('*/60 * * * * *', async () => {
   }
 });
 
-// ── MongoDB connect ───────────────────────────────────────────────
+// ── MongoDB ───────────────────────────────────────────────────────
 async function connectDB() {
   if (!CONFIG.MONGODB_URI) {
     console.log('[db] No MONGODB_URI — running in-memory (Phase 1)');
@@ -133,26 +249,39 @@ async function connectDB() {
 // ── Launch ────────────────────────────────────────────────────────
 async function main() {
   await connectDB();
-
   bot.launch({ dropPendingUpdates: true });
 
+  // Start WebSocket migration listener
+  startMigrationListener(handleMigration);
+
   console.log(`[boot] ✅ Alien Intelligence — Phase ${CONFIG.PHASE} online`);
-  console.log(`[boot] Owner ID: ${CONFIG.OWNER_TELEGRAM_ID}`);
-  console.log(`[boot] TP/SL + Dev Watch monitor: every 30s`);
-  console.log(`[boot] Auto-snipe poller: every 60s (starts OFF)`);
+  console.log(`[boot] TP/SL + Dev Watch: every 30s`);
+  console.log(`[boot] Auto-snipe poller: every 60s`);
+  console.log(`[boot] Migration listener: Helius WebSocket active`);
 
   await notifyOwner(
     `👾 *ALIEN INTELLIGENCE — Online*\n\n` +
-    `Phase 1 boot complete.\n` +
-    `Solana mainnet active 🟢\n` +
-    `Dev wallet tracking active 👁️\n` +
+    `Phase 1 fully loaded 🟢\n\n` +
+    `✅ Safety filters\n` +
+    `✅ Bundle buy detector\n` +
+    `✅ Dev wallet tracker\n` +
+    `✅ Migration listener (WebSocket ⚡)\n` +
+    `✅ Conviction scoring (Safety + Momentum)\n` +
+    `✅ Trade history\n\n` +
     `Type /start for commands.`
   );
 }
 
-// ── Graceful shutdown ─────────────────────────────────────────────
-process.once('SIGINT', () => { bot.stop('SIGINT'); mongoose.disconnect(); });
-process.once('SIGTERM', () => { bot.stop('SIGTERM'); mongoose.disconnect(); });
+process.once('SIGINT', () => {
+  stopMigrationListener();
+  bot.stop('SIGINT');
+  mongoose.disconnect();
+});
+process.once('SIGTERM', () => {
+  stopMigrationListener();
+  bot.stop('SIGTERM');
+  mongoose.disconnect();
+});
 
 main().catch(err => {
   console.error('[boot] Fatal:', err);
