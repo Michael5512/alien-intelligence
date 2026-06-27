@@ -5,7 +5,7 @@ async function getTokenMeta(mintAddress) {
   try {
     const res = await axios.post(CONFIG.HELIUS_RPC, {
       jsonrpc: '2.0',
-      id: 'alien-intel',
+      id: 'alien-meta',
       method: 'getAsset',
       params: { id: mintAddress },
     });
@@ -35,18 +35,70 @@ async function getDexData(mintAddress) {
   }
 }
 
-async function getHolders(mintAddress) {
+/**
+ * Get real holder count via Helius getTokenAccounts
+ * Returns actual total, not capped at 20
+ */
+async function getRealHolderCount(mintAddress) {
+  try {
+    let page = 1;
+    let totalHolders = 0;
+
+    while (true) {
+      const res = await axios.post(
+        `https://mainnet.helius-rpc.com/?api-key=${CONFIG.HELIUS_API_KEY}`,
+        {
+          jsonrpc: '2.0',
+          id: `holders-${page}`,
+          method: 'getTokenAccounts',
+          params: {
+            mint: mintAddress,
+            limit: 1000,
+            page,
+          },
+        },
+        { timeout: 10000 }
+      );
+
+      const accounts = res.data?.result?.token_accounts || [];
+      // Only count accounts with balance > 0
+      const active = accounts.filter(a => a.amount && Number(a.amount) > 0);
+      totalHolders += active.length;
+
+      // If less than 1000 returned, we've hit the end
+      if (accounts.length < 1000) break;
+
+      // Safety cap — don't paginate forever
+      if (page >= 10) break;
+      page++;
+    }
+
+    return totalHolders;
+  } catch (err) {
+    console.error('[filters] getRealHolderCount error:', err.message);
+    return 0;
+  }
+}
+
+/**
+ * Get top holder percentage using getTokenLargestAccounts
+ */
+async function getTopHolderPercent(mintAddress) {
   try {
     const res = await axios.post(CONFIG.HELIUS_RPC, {
       jsonrpc: '2.0',
-      id: 'alien-holders',
+      id: 'top-holders',
       method: 'getTokenLargestAccounts',
       params: [mintAddress],
     });
-    return res.data?.result?.value || [];
+    const accounts = res.data?.result?.value || [];
+    if (!accounts.length) return 0;
+    const totalSupply = accounts.reduce((s, h) => s + Number(h.amount), 0);
+    const topAmount = Number(accounts[0].amount);
+    return totalSupply > 0 ? (topAmount / totalSupply) * 100 : 0;
   } catch (err) {
-    console.error('[filters] getHolders error:', err.message);
-    return [];
+    console.error('[filters] getTopHolderPercent error:', err.message);
+    return 0;
   }
 }
 
@@ -55,10 +107,11 @@ async function runFilters(mintAddress, userFilters = {}) {
   const reasons = [];
   const warnings = [];
 
-  const [dex, meta, holders] = await Promise.all([
+  const [dex, meta, holderCount, topHolderPercent] = await Promise.all([
     getDexData(mintAddress),
     getTokenMeta(mintAddress),
-    getHolders(mintAddress),
+    getRealHolderCount(mintAddress),
+    getTopHolderPercent(mintAddress),
   ]);
 
   if (!dex) {
@@ -81,6 +134,7 @@ async function runFilters(mintAddress, userFilters = {}) {
   const buyRatio = totalTxns > 0 ? (buys / totalTxns) * 100 : 0;
   const tokenAgeSecs = pairCreatedAt ? (Date.now() - pairCreatedAt) / 1000 : 0;
 
+  // ── Filter checks ─────────────────────────────────────────────
   if (liquidity < filters.minLiquidity)
     reasons.push(`❌ Liquidity $${liquidity.toFixed(0)} < min $${filters.minLiquidity}`);
 
@@ -96,15 +150,11 @@ async function runFilters(mintAddress, userFilters = {}) {
   if (sellTax > filters.maxSellTax)
     reasons.push(`❌ Sell tax ${sellTax}% > max ${filters.maxSellTax}%`);
 
-  if (holders.length > 0) {
-    const totalSupply = holders.reduce((s, h) => s + Number(h.amount), 0);
-    const topHolder = holders[0];
-    const topPct = totalSupply > 0 ? (Number(topHolder.amount) / totalSupply) * 100 : 0;
-    if (topPct > filters.maxTopHolderPercent)
-      reasons.push(`❌ Top holder ${topPct.toFixed(1)}% > max ${filters.maxTopHolderPercent}%`);
-    if (holders.length < filters.minHolderCount)
-      warnings.push(`⚠️ Only ${holders.length} holders (min ${filters.minHolderCount})`);
-  }
+  if (topHolderPercent > filters.maxTopHolderPercent)
+    reasons.push(`❌ Top holder ${topHolderPercent.toFixed(1)}% > max ${filters.maxTopHolderPercent}%`);
+
+  if (holderCount < filters.minHolderCount)
+    warnings.push(`⚠️ Only ${holderCount} holders (min ${filters.minHolderCount})`);
 
   if (meta) {
     if (filters.mintAuthorityRevoked && meta.mintAuthority)
@@ -129,9 +179,12 @@ async function runFilters(mintAddress, userFilters = {}) {
       buyTax,
       sellTax,
       tokenAgeSecs: Math.floor(tokenAgeSecs),
-      holderCount: holders.length,
+      holderCount,
+      topHolderPercent: topHolderPercent.toFixed(1),
       dexUrl: dex.url || `https://dexscreener.com/solana/${mintAddress}`,
       pairAddress: dex.pairAddress,
+      mintAuthority: meta?.mintAuthority || null,
+      freezeAuthority: meta?.freezeAuthority || null,
     },
   };
 }
