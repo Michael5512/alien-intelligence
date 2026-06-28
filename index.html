@@ -1,0 +1,1030 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Alien Intelligence — First in. Every time.</title>
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&family=Space+Mono&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:       #0A0A0F;
+      --surface:  #111118;
+      --surface2: #16161F;
+      --border:   rgba(255,255,255,0.07);
+      --border2:  rgba(255,255,255,0.12);
+      --accent:   #5C6FFF;
+      --accent-dim: rgba(92,111,255,0.15);
+      --white:    #E8E8F0;
+      --muted:    #666680;
+      --muted2:   #44445A;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      background: var(--bg);
+      color: var(--white);
+      font-family: 'DM Sans', sans-serif;
+      font-weight: 400;
+      line-height: 1.6;
+      overflow-x: hidden;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ─── NAV ─── */
+    nav {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 1.25rem 3rem;
+      background: rgba(10,10,15,0.92);
+      backdrop-filter: blur(20px);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .nav-logo {
+      font-family: 'Syne', sans-serif;
+      font-weight: 800; font-size: 1rem;
+      letter-spacing: 0.04em;
+      color: var(--white);
+    }
+
+    .nav-links {
+      display: flex; gap: 2.5rem; list-style: none;
+    }
+    .nav-links a {
+      font-size: 0.82rem; color: var(--muted);
+      text-decoration: none; transition: color 0.15s;
+      font-weight: 400;
+    }
+    .nav-links a:hover { color: var(--white); }
+
+    .nav-cta {
+      font-family: 'Space Mono', monospace;
+      font-size: 0.72rem;
+      padding: 0.5rem 1.25rem;
+      background: var(--accent);
+      color: #fff; border: none;
+      cursor: pointer; text-decoration: none;
+      transition: opacity 0.15s;
+    }
+    .nav-cta:hover { opacity: 0.85; }
+
+    /* ─── HERO ─── */
+    .hero-wrap {
+      position: relative; overflow: hidden;
+      border-bottom: 1px solid var(--border);
+      background: var(--bg);
+    }
+
+    .hero-wrap::before {
+      content: '';
+      position: absolute; inset: 0; z-index: 1;
+      background: repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 2px,
+        rgba(0,0,0,0.07) 2px,
+        rgba(0,0,0,0.07) 4px
+      );
+      pointer-events: none;
+    }
+
+    .orb {
+      position: absolute; border-radius: 50%;
+      filter: blur(90px); pointer-events: none; z-index: 0;
+    }
+    .orb-1 {
+      width: 500px; height: 500px;
+      background: rgba(92,111,255,0.12);
+      top: -100px; right: -100px;
+      animation: orb-drift 8s ease-in-out infinite alternate;
+    }
+    .orb-2 {
+      width: 350px; height: 350px;
+      background: rgba(0,255,180,0.06);
+      bottom: 0; left: -80px;
+      animation: orb-drift 11s ease-in-out infinite alternate-reverse;
+    }
+    @keyframes orb-drift {
+      from { transform: translate(0, 0); }
+      to   { transform: translate(30px, 40px); }
+    }
+
+    .hero {
+      min-height: 100vh;
+      display: flex; flex-direction: column;
+      justify-content: center;
+      padding: 10rem 3rem 6rem;
+      max-width: 1200px; margin: 0 auto;
+      position: relative; z-index: 2;
+    }
+
+    .hero-tag {
+      font-family: 'Space Mono', monospace;
+      font-size: 0.65rem; letter-spacing: 0.2em;
+      text-transform: uppercase; color: var(--accent);
+      margin-bottom: 2rem;
+      display: flex; align-items: center; gap: 0.75rem;
+    }
+    .hero-tag::before {
+      content: '';
+      display: inline-block; width: 24px; height: 1px;
+      background: var(--accent);
+    }
+
+    .hero-title {
+      font-family: 'Syne', sans-serif;
+      font-weight: 800;
+      font-size: clamp(2.6rem, 5vw, 4.8rem);
+      line-height: 1.0;
+      letter-spacing: -0.025em;
+      margin-bottom: 2rem;
+    }
+
+    .glitch {
+      position: relative;
+      color: var(--accent);
+      display: inline-block;
+    }
+    .glitch::before,
+    .glitch::after {
+      content: attr(data-text);
+      position: absolute; top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: transparent;
+    }
+    .glitch::before {
+      color: #0ff;
+      animation: glitch-1 3.5s infinite;
+      clip-path: polygon(0 30%, 100% 30%, 100% 50%, 0 50%);
+    }
+    .glitch::after {
+      color: #f0f;
+      animation: glitch-2 3.5s infinite;
+      clip-path: polygon(0 60%, 100% 60%, 100% 75%, 0 75%);
+    }
+    @keyframes glitch-1 {
+      0%, 90%, 100% { transform: translate(0); opacity: 0; }
+      92% { transform: translate(-3px, 1px); opacity: 0.8; }
+      94% { transform: translate(3px, -1px); opacity: 0.8; }
+      96% { transform: translate(0); opacity: 0; }
+    }
+    @keyframes glitch-2 {
+      0%, 90%, 100% { transform: translate(0); opacity: 0; }
+      93% { transform: translate(3px, 2px); opacity: 0.6; }
+      95% { transform: translate(-3px, -1px); opacity: 0.6; }
+      97% { transform: translate(0); opacity: 0; }
+    }
+
+    .hero-body {
+      font-size: 0.95rem; color: var(--muted);
+      max-width: 420px; line-height: 1.8;
+      margin-bottom: 2.5rem; font-weight: 300;
+    }
+
+    .hero-actions { display: flex; gap: 1rem; flex-wrap: wrap; align-items: center; }
+
+    .btn-primary {
+      font-family: 'Space Mono', monospace;
+      font-size: 0.75rem; letter-spacing: 0.06em;
+      padding: 0.85rem 2rem;
+      background: var(--accent);
+      color: #fff; border: none;
+      cursor: pointer; text-decoration: none;
+      transition: opacity 0.15s, box-shadow 0.15s;
+      display: inline-block;
+    }
+    .btn-primary:hover {
+      opacity: 0.9;
+      box-shadow: 0 0 24px rgba(92,111,255,0.5);
+    }
+
+    .btn-ghost {
+      font-size: 0.82rem; color: var(--muted);
+      text-decoration: none; transition: color 0.15s;
+      display: inline-flex; align-items: center; gap: 0.4rem;
+    }
+    .btn-ghost:hover { color: var(--white); }
+    .btn-ghost::after { content: '↓'; }
+
+    /* ─── SKULL ─── */
+    .skull-wrap {
+      position: relative; width: 340px; height: 340px;
+      display: flex; align-items: center; justify-content: center;
+      margin: 3rem auto 0;
+    }
+
+    .skull-ring {
+      position: absolute; inset: -20px;
+      border-radius: 50%;
+      border: 1px solid rgba(92,111,255,0.25);
+      animation: ring-spin 12s linear infinite;
+    }
+    .skull-ring::before {
+      content: '';
+      position: absolute; top: -3px; left: 50%;
+      width: 6px; height: 6px; border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 10px var(--accent);
+      transform: translateX(-50%);
+    }
+    .skull-ring-2 {
+      position: absolute; inset: -45px;
+      border-radius: 50%;
+      border: 1px dashed rgba(92,111,255,0.1);
+      animation: ring-spin 20s linear infinite reverse;
+    }
+    @keyframes ring-spin {
+      from { transform: rotate(0deg); }
+      to   { transform: rotate(360deg); }
+    }
+
+    .skull-svg {
+      width: 260px; height: 260px;
+      animation: skull-float 4s ease-in-out infinite;
+      filter: drop-shadow(0 0 30px rgba(92,111,255,0.4))
+              drop-shadow(0 0 80px rgba(92,111,255,0.15));
+    }
+    @keyframes skull-float {
+      0%, 100% { transform: translateY(0px); }
+      50%       { transform: translateY(-14px); }
+    }
+
+    .eye-glow {
+      animation: eye-pulse 2.5s ease-in-out infinite;
+    }
+    @keyframes eye-pulse {
+      0%, 100% { opacity: 1; filter: brightness(1); }
+      50%       { opacity: 0.6; filter: brightness(1.8); }
+    }
+
+    .skull-scan {
+      position: absolute;
+      width: 100%; height: 2px;
+      background: linear-gradient(90deg, transparent, rgba(92,111,255,0.6), transparent);
+      top: 0;
+      animation: scan-sweep 3s ease-in-out infinite;
+      pointer-events: none;
+    }
+    @keyframes scan-sweep {
+      0%   { top: 10%; opacity: 0; }
+      10%  { opacity: 1; }
+      90%  { opacity: 1; }
+      100% { top: 90%; opacity: 0; }
+    }
+
+    /* ─── STATS ─── */
+    .stats {
+      border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+    }
+    .stats-inner {
+      max-width: 1200px; margin: 0 auto;
+      display: grid; grid-template-columns: repeat(4, 1fr);
+    }
+    .stat {
+      padding: 2.5rem 3rem;
+      border-right: 1px solid var(--border);
+    }
+    .stat:last-child { border-right: none; }
+    .stat-n {
+      font-family: 'Syne', sans-serif;
+      font-weight: 800; font-size: 2.2rem;
+      color: var(--white); margin-bottom: 0.3rem;
+      letter-spacing: -0.02em;
+    }
+    .stat-l {
+      font-size: 0.78rem; color: var(--muted); font-weight: 300;
+    }
+
+    /* ─── SECTIONS ─── */
+    .section {
+      max-width: 1200px; margin: 0 auto;
+      padding: 7rem 3rem;
+    }
+
+    .section-divider {
+      border: none; border-top: 1px solid var(--border);
+      margin: 0 3rem;
+    }
+
+    .eyebrow {
+      font-family: 'Space Mono', monospace;
+      font-size: 0.65rem; letter-spacing: 0.18em;
+      text-transform: uppercase; color: var(--muted);
+      margin-bottom: 1.5rem;
+    }
+
+    .section-heading {
+      font-family: 'Syne', sans-serif;
+      font-weight: 800;
+      font-size: clamp(1.8rem, 3.5vw, 2.8rem);
+      line-height: 1.1; letter-spacing: -0.02em;
+      margin-bottom: 1.25rem;
+    }
+
+    .section-body {
+      font-size: 0.92rem; color: var(--muted);
+      max-width: 460px; line-height: 1.75; font-weight: 300;
+    }
+
+    /* ─── ABOUT ─── */
+    .about-grid {
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: 6rem; align-items: center;
+    }
+
+    .about-terminal {
+      background: var(--surface);
+      border: 1px solid var(--border2);
+      padding: 1.75rem;
+    }
+
+    .term-bar {
+      display: flex; gap: 6px; margin-bottom: 1.25rem;
+    }
+    .term-dot {
+      width: 10px; height: 10px; border-radius: 50%;
+      background: var(--border2);
+    }
+
+    .term-line {
+      font-family: 'Space Mono', monospace;
+      font-size: 0.7rem; line-height: 2;
+      color: var(--muted);
+    }
+    .term-line .ok  { color: #4ADE80; }
+    .term-line .hi  { color: var(--accent); }
+    .term-line .val { color: var(--white); }
+    .cursor {
+      display: inline-block; width: 7px; height: 13px;
+      background: var(--accent); vertical-align: middle;
+      animation: blink 1.1s step-end infinite;
+    }
+    @keyframes blink { 50% { opacity: 0; } }
+
+    /* ─── FEATURES ─── */
+    .features-grid {
+      display: grid; grid-template-columns: repeat(3, 1fr);
+      margin-top: 4rem;
+    }
+
+    .feat {
+      padding: 2.5rem 2rem;
+      border: 1px solid var(--border);
+      margin: -1px 0 0 -1px;
+      transition: background 0.2s;
+    }
+    .feat:hover { background: var(--surface); }
+
+    .feat-label {
+      font-family: 'Space Mono', monospace;
+      font-size: 0.62rem; letter-spacing: 0.14em;
+      text-transform: uppercase; color: var(--accent);
+      margin-bottom: 1rem;
+    }
+
+    .feat-title {
+      font-family: 'Syne', sans-serif;
+      font-weight: 700; font-size: 1.05rem;
+      margin-bottom: 0.75rem; color: var(--white);
+    }
+
+    .feat-desc {
+      font-size: 0.83rem; color: var(--muted);
+      line-height: 1.7; font-weight: 300;
+    }
+
+    /* ─── HOW IT WORKS ─── */
+    .how-bg { background: var(--surface); }
+
+    .steps {
+      display: grid; grid-template-columns: repeat(3, 1fr);
+      gap: 0; margin-top: 4rem;
+    }
+
+    .step {
+      padding: 2.5rem 2rem;
+      border-right: 1px solid var(--border);
+    }
+    .step:last-child { border-right: none; }
+
+    .step-n {
+      font-family: 'Space Mono', monospace;
+      font-size: 0.65rem; color: var(--muted2);
+      margin-bottom: 1.5rem;
+    }
+
+    .step-title {
+      font-family: 'Syne', sans-serif;
+      font-weight: 700; font-size: 1rem;
+      margin-bottom: 0.75rem;
+    }
+
+    .step-desc {
+      font-size: 0.83rem; color: var(--muted);
+      line-height: 1.7; font-weight: 300;
+    }
+
+    /* ─── PRICING ─── */
+    .pricing-grid {
+      display: grid; grid-template-columns: repeat(3, 1fr);
+      margin-top: 4rem; border: 1px solid var(--border);
+    }
+
+    .plan {
+      padding: 2.5rem 2rem;
+      border-right: 1px solid var(--border);
+      position: relative;
+    }
+    .plan:last-child { border-right: none; }
+    .plan.featured { background: var(--surface2); }
+
+    .plan-badge {
+      font-family: 'Space Mono', monospace;
+      font-size: 0.58rem; letter-spacing: 0.12em;
+      text-transform: uppercase;
+      background: var(--accent);
+      color: #fff; padding: 0.2rem 0.6rem;
+      display: inline-block; margin-bottom: 1.5rem;
+    }
+
+    .plan-name {
+      font-family: 'Syne', sans-serif;
+      font-weight: 700; font-size: 0.78rem;
+      letter-spacing: 0.1em; color: var(--muted);
+      margin-bottom: 1rem;
+      text-transform: uppercase;
+    }
+
+    .plan-price-wrap { margin-bottom: 0.25rem; }
+
+    .plan-price-orig {
+      font-family: 'Space Mono', monospace;
+      font-size: 0.72rem; color: var(--muted2);
+      text-decoration: line-through;
+      margin-bottom: 0.1rem;
+    }
+
+    .plan-price {
+      font-family: 'Syne', sans-serif;
+      font-weight: 800; font-size: 2.4rem;
+      color: var(--white); letter-spacing: -0.03em;
+      line-height: 1;
+    }
+    .plan-price.green { color: #4ADE80; }
+
+    .plan-cycle {
+      font-family: 'Space Mono', monospace;
+      font-size: 0.62rem; color: var(--muted);
+      margin: 0.5rem 0 1.75rem;
+    }
+
+    .eb-tag {
+      display: inline-block;
+      font-family: 'Space Mono', monospace;
+      font-size: 0.58rem; letter-spacing: 0.1em;
+      background: rgba(74,222,128,0.12);
+      border: 1px solid rgba(74,222,128,0.3);
+      color: #4ADE80;
+      padding: 0.15rem 0.5rem;
+      margin-bottom: 1rem;
+    }
+
+    .plan-list {
+      list-style: none; margin-bottom: 2rem;
+    }
+    .plan-list li {
+      font-size: 0.8rem; color: var(--muted);
+      padding: 0.45rem 0;
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: flex-start; gap: 0.5rem;
+      font-weight: 300;
+    }
+    .plan-list li::before { content: '—'; color: var(--muted2); flex-shrink: 0; }
+
+    .plan-btn {
+      display: block; width: 100%;
+      font-family: 'Space Mono', monospace;
+      font-size: 0.7rem; letter-spacing: 0.06em;
+      padding: 0.8rem 1rem;
+      text-align: center; text-decoration: none;
+      border: 1px solid var(--border2);
+      color: var(--white); background: transparent;
+      cursor: pointer; transition: all 0.15s;
+    }
+    .plan-btn:hover { background: var(--accent); border-color: var(--accent); }
+    .plan.featured .plan-btn {
+      background: var(--accent); border-color: var(--accent);
+    }
+    .plan.featured .plan-btn:hover { opacity: 0.85; }
+
+    /* ─── EARLY BIRD ─── */
+    .early-bird-banner {
+      background: rgba(92,111,255,0.08);
+      border: 1px solid rgba(92,111,255,0.25);
+      padding: 1rem 1.5rem;
+      display: flex; align-items: center; gap: 1rem;
+      flex-wrap: wrap;
+      margin-bottom: 3rem;
+    }
+    .eb-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: #4ADE80;
+      box-shadow: 0 0 8px #4ADE80;
+      animation: dot-blink 1.5s ease-in-out infinite;
+      flex-shrink: 0;
+    }
+    @keyframes dot-blink {
+      0%, 100% { opacity: 1; } 50% { opacity: 0.3; }
+    }
+    .eb-text {
+      font-family: 'Space Mono', monospace;
+      font-size: 0.72rem; color: var(--white);
+      letter-spacing: 0.04em;
+    }
+    .eb-text span { color: #4ADE80; font-weight: 700; }
+
+    .spots-bar {
+      margin-bottom: 2.5rem;
+      display: flex; align-items: center; gap: 1.5rem; flex-wrap: wrap;
+    }
+    .spots-track {
+      flex: 1; min-width: 200px;
+      height: 4px; background: var(--surface2);
+      border-radius: 2px; overflow: hidden;
+    }
+    .spots-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--accent), #4ADE80);
+      border-radius: 2px;
+      width: 34%;
+      transition: width 0.5s ease;
+    }
+    .spots-text {
+      font-family: 'Space Mono', monospace;
+      font-size: 0.68rem; color: var(--muted);
+      white-space: nowrap;
+    }
+    .spots-text strong { color: var(--white); }
+
+    /* ─── PAYMENT ─── */
+    .pay-grid {
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: 6rem; align-items: center;
+    }
+
+    .pay-card {
+      background: var(--surface);
+      border: 1px solid var(--border2);
+      padding: 2.5rem;
+    }
+
+    .pay-header {
+      display: flex; align-items: center; gap: 1rem;
+      margin-bottom: 2rem;
+      padding-bottom: 1.5rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .sol-mark {
+      width: 36px; height: 36px;
+      background: linear-gradient(135deg, #9945FF 0%, #14F195 100%);
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 700; font-size: 0.9rem; color: #fff;
+      flex-shrink: 0;
+    }
+
+    .pay-name {
+      font-family: 'Syne', sans-serif;
+      font-weight: 700; font-size: 0.9rem;
+    }
+    .pay-sub {
+      font-size: 0.72rem; color: var(--muted); font-weight: 300;
+    }
+
+    .pay-steps { list-style: none; }
+    .pay-steps li {
+      display: flex; gap: 1rem; align-items: flex-start;
+      padding: 0.9rem 0;
+      border-bottom: 1px solid var(--border);
+      font-size: 0.82rem; color: var(--muted); font-weight: 300;
+    }
+    .pay-steps li:last-child { border-bottom: none; }
+    .pay-n {
+      font-family: 'Space Mono', monospace;
+      font-size: 0.62rem; color: var(--accent);
+      flex-shrink: 0; padding-top: 2px;
+    }
+
+    /* ─── CTA ─── */
+    .cta-wrap {
+      border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .cta-inner {
+      max-width: 1200px; margin: 0 auto;
+      padding: 8rem 3rem;
+      display: flex; justify-content: space-between;
+      align-items: flex-end; gap: 3rem; flex-wrap: wrap;
+    }
+
+    .cta-heading {
+      font-family: 'Syne', sans-serif;
+      font-weight: 800;
+      font-size: clamp(2rem, 4vw, 3.5rem);
+      line-height: 1.1; letter-spacing: -0.02em;
+      max-width: 600px;
+    }
+
+    /* ─── FOOTER ─── */
+    footer {
+      max-width: 1200px; margin: 0 auto;
+      padding: 2.5rem 3rem;
+      display: flex; justify-content: space-between;
+      align-items: center; flex-wrap: wrap; gap: 1rem;
+    }
+
+    .footer-logo {
+      font-family: 'Syne', sans-serif;
+      font-weight: 800; font-size: 0.9rem;
+      color: var(--white);
+    }
+
+    .footer-links { display: flex; gap: 2rem; }
+    .footer-links a {
+      font-size: 0.78rem; color: var(--muted);
+      text-decoration: none; transition: color 0.15s;
+    }
+    .footer-links a:hover { color: var(--white); }
+
+    .footer-note {
+      font-size: 0.7rem; color: var(--muted2);
+      font-family: 'Space Mono', monospace;
+    }
+
+    /* ─── RESPONSIVE ─── */
+    @media (max-width: 960px) {
+      nav { padding: 1rem 1.5rem; }
+      .nav-links { display: none; }
+      .hero { padding-left: 1.5rem; padding-right: 1.5rem; }
+      .section { padding-left: 1.5rem; padding-right: 1.5rem; }
+      .section-divider { margin: 0 1.5rem; }
+      .about-grid, .pay-grid { grid-template-columns: 1fr; gap: 3rem; }
+      .features-grid, .steps { grid-template-columns: 1fr 1fr; }
+      .stats-inner { grid-template-columns: 1fr 1fr; }
+      .stat { border-right: none; border-bottom: 1px solid var(--border); }
+      .pricing-grid { grid-template-columns: 1fr; }
+      .plan { border-right: none; border-bottom: 1px solid var(--border); }
+      .cta-inner { flex-direction: column; align-items: flex-start; }
+      footer { flex-direction: column; align-items: flex-start; }
+      .skull-wrap { width: 220px; height: 220px; }
+      .skull-svg { width: 170px; height: 170px; }
+    }
+
+    @media (max-width: 600px) {
+      .features-grid, .steps, .pricing-grid, .stats-inner { grid-template-columns: 1fr; }
+      .hero-title { font-size: 2.6rem; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- NAV -->
+  <nav>
+    <div class="nav-logo">Alien Intelligence</div>
+    <ul class="nav-links">
+      <li><a href="#about">About</a></li>
+      <li><a href="#features">Features</a></li>
+      <li><a href="#pricing">Pricing</a></li>
+      <li><a href="#payment">Payment</a></li>
+    </ul>
+    <a href="https://t.me/YOUR_BOT_USERNAME" class="nav-cta">Launch Bot →</a>
+  </nav>
+
+  <!-- HERO -->
+  <div class="hero-wrap">
+    <div class="orb orb-1"></div>
+    <div class="orb orb-2"></div>
+    <div class="hero">
+      <div class="hero-tag">Multi-chain · On-chain execution · Solana + Base</div>
+      <h1 class="hero-title">
+        Trade like<br/>you're from<br/><span class="glitch" data-text="another planet.">another planet.</span>
+      </h1>
+      <p class="hero-body">
+        Alien Intelligence watches the blockchain so you don't have to. It detects new launches, tracks dev wallets in real time, filters rugs before you're in, and executes trades in under two seconds — across Solana and Base.
+      </p>
+      <div class="hero-actions">
+        <a href="https://t.me/YOUR_BOT_USERNAME" class="btn-primary">Access the bot →</a>
+        <a href="#features" class="btn-ghost">See how it works</a>
+      </div>
+
+      <!-- Skull in hero -->
+      <div class="skull-wrap">
+        <div class="skull-ring"></div>
+        <div class="skull-ring-2"></div>
+        <div class="skull-scan"></div>
+        <svg class="skull-svg" viewBox="0 0 200 220" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <ellipse cx="100" cy="95" rx="75" ry="80" fill="rgba(92,111,255,0.06)"/>
+          <path d="M 30 110 Q 25 60 100 25 Q 175 60 170 110 L 165 145 Q 160 160 100 162 Q 40 160 35 145 Z"
+                fill="#0D0D20" stroke="#5C6FFF" stroke-width="1.5"/>
+          <path d="M 55 65 Q 100 35 145 65" stroke="rgba(92,111,255,0.4)" stroke-width="1" fill="none"/>
+          <ellipse cx="68" cy="95" rx="28" ry="20" fill="#050510"/>
+          <ellipse cx="68" cy="95" rx="28" ry="20" stroke="#5C6FFF" stroke-width="1.2"/>
+          <ellipse class="eye-glow" cx="68" cy="95" rx="18" ry="13" fill="rgba(92,111,255,0.25)"/>
+          <ellipse class="eye-glow" cx="68" cy="95" rx="10" ry="7" fill="rgba(92,111,255,0.5)"/>
+          <ellipse cx="68" cy="95" rx="5" ry="4" fill="#8899FF"/>
+          <ellipse cx="65" cy="93" rx="2" ry="1.5" fill="rgba(255,255,255,0.5)"/>
+          <ellipse cx="132" cy="95" rx="28" ry="20" fill="#050510"/>
+          <ellipse cx="132" cy="95" rx="28" ry="20" stroke="#5C6FFF" stroke-width="1.2"/>
+          <ellipse class="eye-glow" cx="132" cy="95" rx="18" ry="13" fill="rgba(92,111,255,0.25)"/>
+          <ellipse class="eye-glow" cx="132" cy="95" rx="10" ry="7" fill="rgba(92,111,255,0.5)"/>
+          <ellipse cx="132" cy="95" rx="5" ry="4" fill="#8899FF"/>
+          <ellipse cx="129" cy="93" rx="2" ry="1.5" fill="rgba(255,255,255,0.5)"/>
+          <ellipse cx="100" cy="125" rx="6" ry="4" fill="#050510" stroke="rgba(92,111,255,0.3)" stroke-width="0.8"/>
+          <path d="M 35 145 Q 50 170 70 175 L 130 175 Q 150 170 165 145"
+                stroke="#5C6FFF" stroke-width="1.2" fill="none" stroke-dasharray="4 3"/>
+          <rect x="58"  y="162" width="12" height="14" rx="2" fill="#0D0D20" stroke="#5C6FFF" stroke-width="0.8"/>
+          <rect x="74"  y="162" width="12" height="16" rx="2" fill="#0D0D20" stroke="#5C6FFF" stroke-width="0.8"/>
+          <rect x="90"  y="162" width="12" height="16" rx="2" fill="#0D0D20" stroke="#5C6FFF" stroke-width="0.8"/>
+          <rect x="106" y="162" width="12" height="16" rx="2" fill="#0D0D20" stroke="#5C6FFF" stroke-width="0.8"/>
+          <rect x="122" y="162" width="12" height="14" rx="2" fill="#0D0D20" stroke="#5C6FFF" stroke-width="0.8"/>
+          <path d="M 30 100 L 15 90 M 15 90 L 5 95 M 15 90 L 12 80" stroke="rgba(92,111,255,0.35)" stroke-width="0.8" fill="none"/>
+          <path d="M 170 100 L 185 90 M 185 90 L 195 95 M 185 90 L 188 80" stroke="rgba(92,111,255,0.35)" stroke-width="0.8" fill="none"/>
+          <circle cx="5"   cy="95" r="2"   fill="rgba(92,111,255,0.6)"/>
+          <circle cx="195" cy="95" r="2"   fill="rgba(92,111,255,0.6)"/>
+          <circle cx="12"  cy="80" r="1.5" fill="rgba(92,111,255,0.4)"/>
+          <circle cx="188" cy="80" r="1.5" fill="rgba(92,111,255,0.4)"/>
+          <text x="100" y="145" text-anchor="middle" fill="rgba(92,111,255,0.3)"
+                font-family="monospace" font-size="5">AI · ON-CHAIN · EXECUTE</text>
+        </svg>
+      </div>
+    </div>
+  </div>
+
+  <!-- STATS -->
+  <div class="stats">
+    <div class="stats-inner">
+      <div class="stat">
+        <div class="stat-n">2</div>
+        <div class="stat-l">Chains monitored</div>
+      </div>
+      <div class="stat">
+        <div class="stat-n">&lt;500ms</div>
+        <div class="stat-l">Migration detection</div>
+      </div>
+      <div class="stat">
+        <div class="stat-n">24/7</div>
+        <div class="stat-l">Always scanning</div>
+      </div>
+      <div class="stat">
+        <div class="stat-n">8+</div>
+        <div class="stat-l">Safety filters</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ABOUT -->
+  <hr class="section-divider" />
+  <div class="section" id="about">
+    <div class="about-grid">
+      <div>
+        <h2 class="section-heading">Not a signal group.<br/>Not a copy trader.<br/>Something else.</h2>
+        <p class="section-body">
+          Alien Intelligence sits directly on-chain. It reads raw blockchain data, wallet movements, liquidity events, token launches — and acts on them before most traders even open their phones. The only sniper that keeps watching the dev wallet after you're already in.
+        </p>
+      </div>
+      <div>
+        <div class="about-terminal">
+          <div class="term-bar">
+            <div class="term-dot"></div>
+            <div class="term-dot"></div>
+            <div class="term-dot"></div>
+          </div>
+          <div class="term-line">
+            <span class="ok">✓</span> Migration detected — <span class="hi">PUMP→RAY</span><br/>
+            <span class="ok">✓</span> Filters passed — <span class="val">8/8</span><br/>
+            <span class="hi">→</span> Conviction score: <span class="val">78/100</span> · Grade A<br/>
+            <span class="hi">→</span> Bundle check: <span class="ok">CLEAN</span><br/>
+            <span class="hi">→</span> Dev wallet: <span class="val">4.2% holding</span><br/>
+            <span class="ok">✓</span> Executing snipe — <span class="val">0.5 SOL</span><br/>
+            <span class="ok">✓</span> TX confirmed in <span class="val">1.3s</span><br/>
+            <span class="hi">→</span> Dev watch: <span class="ok">ACTIVE 👁</span><br/>
+            <span class="hi">→</span> TP: <span class="val">+100%</span> · SL: <span class="val">-30%</span><br/>
+            <span class="ok">▊</span> <span class="cursor"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- FEATURES -->
+  <hr class="section-divider" />
+  <div class="section" id="features">
+    <div class="eyebrow">Capabilities</div>
+    <h2 class="section-heading">Eight systems.<br/>One bot.</h2>
+    <div class="features-grid">
+      <div class="feat">
+        <div class="feat-label">01 — Sniper</div>
+        <div class="feat-title">Launch Sniper</div>
+        <p class="feat-desc">Detects new liquidity pairs on Solana and Base the moment they appear and executes your buy before most traders see it listed. Speed measured in milliseconds.</p>
+      </div>
+      <div class="feat">
+        <div class="feat-label">02 — Migration</div>
+        <div class="feat-title">Pump.fun Migration Detector</div>
+        <p class="feat-desc">Helius WebSocket listener catches Pump.fun → Raydium migrations in 100-500ms — before DexScreener even indexes them. The earliest possible entry point.</p>
+      </div>
+      <div class="feat">
+        <div class="feat-label">03 — Intelligence</div>
+        <div class="feat-title">Conviction Scoring</div>
+        <p class="feat-desc">Every token scores 0-100 across 8 dimensions before execution. Two modes — Safety for standard snipes, Momentum for fresh migrations. No other bot does this.</p>
+      </div>
+      <div class="feat">
+        <div class="feat-label">04 — Safety</div>
+        <div class="feat-title">Dev Wallet Tracker</div>
+        <p class="feat-desc">The only sniper that watches after you're in. Identifies the dev wallet, monitors their balance every 30 seconds, and alerts — or auto-sells — the moment they move.</p>
+      </div>
+      <div class="feat">
+        <div class="feat-label">05 — Protection</div>
+        <div class="feat-title">Bundle Buy Detector</div>
+        <p class="feat-desc">Uses postTokenBalances — not signer detection — to catch coordinated same-block wallet distributions. Catches bundled launches that slip past every other filter.</p>
+      </div>
+      <div class="feat">
+        <div class="feat-label">06 — Execution</div>
+        <div class="feat-title">Jupiter v6 Swaps</div>
+        <p class="feat-desc">Best price routing on Solana. Auto-slippage, priority fees, versioned transactions. Base via Uniswap in Phase 4. One interface across both chains.</p>
+      </div>
+      <div class="feat">
+        <div class="feat-label">07 — Exit</div>
+        <div class="feat-title">Auto TP / Stop-Loss</div>
+        <p class="feat-desc">Set your exit before you enter. Alien Intelligence closes positions at your target without emotion, without delay, without needing you awake.</p>
+      </div>
+      <div class="feat">
+        <div class="feat-label">08 — History</div>
+        <div class="feat-title">Trade Intelligence</div>
+        <p class="feat-desc">Win rate, avg ROI, best trade, worst trade — all logged per snipe with conviction score. Most bots just execute. Alien Intelligence helps you learn.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- HOW IT WORKS -->
+  <div class="how-bg" style="border-top:1px solid var(--border);border-bottom:1px solid var(--border);">
+    <div class="section" id="how">
+      <div class="eyebrow">Protocol</div>
+      <h2 class="section-heading">Three steps.<br/>Then it runs itself.</h2>
+      <div class="steps">
+        <div class="step">
+          <div class="step-n">Step 01</div>
+          <div class="step-title">Connect</div>
+          <p class="step-desc">Start the Telegram bot, connect your Solana wallet, and configure your chains, filters, and trade amounts via simple commands.</p>
+        </div>
+        <div class="step">
+          <div class="step-n">Step 02</div>
+          <div class="step-title">Configure</div>
+          <p class="step-desc">Set buy amounts, slippage, take-profit %, stop-loss %, and filter thresholds. Everything adjustable anytime via Telegram commands.</p>
+        </div>
+        <div class="step">
+          <div class="step-n">Step 03</div>
+          <div class="step-title">Execute</div>
+          <p class="step-desc">Alien Intelligence scans 24/7. When conditions are met, it fires. You get a Telegram confirmation with TX hash and conviction score for every trade.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PRICING -->
+  <hr class="section-divider" />
+  <div class="section" id="pricing">
+    <div class="eyebrow">Access tiers</div>
+    <h2 class="section-heading">Early access.<br/>Limited spots.</h2>
+    <p class="section-body" style="margin-bottom:2rem;">All plans paid in USDC on Solana. No cards. No KYC. Price increases after 50 spots are filled.</p>
+
+    <div class="early-bird-banner">
+      <div class="eb-dot"></div>
+      <div class="eb-text">Early bird pricing active — <span id="spots-remaining">33 spots remaining</span> before prices increase to $49 / $99</div>
+    </div>
+
+    <div class="spots-bar">
+      <div class="spots-track"><div class="spots-fill"></div></div>
+      <div class="spots-text"><strong>17 of 50</strong> early bird spots claimed</div>
+    </div>
+
+    <div class="pricing-grid">
+
+      <div class="plan">
+        <div class="plan-name">Free</div>
+        <div class="plan-price-wrap">
+          <div class="plan-price">$0</div>
+        </div>
+        <div class="plan-cycle">Forever</div>
+        <ul class="plan-list">
+          <li>Migration alerts only</li>
+          <li>No trade execution</li>
+          <li>1 chain monitoring</li>
+          <li>Basic token scan</li>
+          <li>Conviction score view</li>
+        </ul>
+        <a href="https://t.me/YOUR_BOT_USERNAME" class="plan-btn">Get started</a>
+      </div>
+
+      <div class="plan featured">
+        <div class="plan-badge">Most popular</div>
+        <div class="eb-tag">EARLY BIRD</div>
+        <div class="plan-name">Hunter</div>
+        <div class="plan-price-wrap">
+          <div class="plan-price-orig">$49 / month after launch</div>
+          <div class="plan-price green">$29</div>
+        </div>
+        <div class="plan-cycle">/ month · USDC · first 50 users</div>
+        <ul class="plan-list">
+          <li>Auto-execution enabled</li>
+          <li>Solana mainnet live</li>
+          <li>Full 8-filter safety suite</li>
+          <li>Dev wallet tracker</li>
+          <li>Migration sniper active</li>
+          <li>TP / Stop-loss automation</li>
+          <li>Trade history + win rate</li>
+        </ul>
+        <a href="https://t.me/YOUR_BOT_USERNAME" class="plan-btn">Claim early access</a>
+      </div>
+
+      <div class="plan">
+        <div class="eb-tag">EARLY BIRD</div>
+        <div class="plan-name">Alien</div>
+        <div class="plan-price-wrap">
+          <div class="plan-price-orig">$99 / month after launch</div>
+          <div class="plan-price green">$59</div>
+        </div>
+        <div class="plan-cycle">/ month · USDC · first 50 users</div>
+        <ul class="plan-list">
+          <li>Everything in Hunter</li>
+          <li>Auto-sell on dev move</li>
+          <li>First-priority execution</li>
+          <li>Custom filter profiles</li>
+          <li>Base chain (Phase 4)</li>
+          <li>Direct support access</li>
+          <li>Early feature access</li>
+        </ul>
+        <a href="https://t.me/YOUR_BOT_USERNAME" class="plan-btn">Claim early access</a>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- PAYMENT -->
+  <hr class="section-divider" />
+  <div class="section" id="payment">
+    <div class="pay-grid">
+      <div>
+        <div class="eyebrow">Payment</div>
+        <h2 class="section-heading">Pay on-chain.<br/>Activate instantly.</h2>
+        <p class="section-body">No cards. No KYC. No middlemen. Subscriptions are processed natively on Solana via USDC. Your Telegram ID unlocks the moment payment confirms on-chain.</p>
+      </div>
+      <div class="pay-card">
+        <div class="pay-header">
+          <div class="sol-mark">◎</div>
+          <div>
+            <div class="pay-name">Solana Pay · USDC</div>
+            <div class="pay-sub">On-chain · Instant activation</div>
+          </div>
+        </div>
+        <ul class="pay-steps">
+          <li><span class="pay-n">01</span> Start the bot and pick a plan</li>
+          <li><span class="pay-n">02</span> Bot generates your unique payment address</li>
+          <li><span class="pay-n">03</span> Send USDC on Solana to that address</li>
+          <li><span class="pay-n">04</span> TX confirms — access unlocks in seconds</li>
+          <li><span class="pay-n">05</span> Renew monthly manually — no auto-billing</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- CTA -->
+  <div class="cta-wrap">
+    <div class="cta-inner">
+      <h2 class="cta-heading">The blockchain doesn't sleep.<br/>Neither does Alien Intelligence.</h2>
+      <div>
+        <a href="https://t.me/YOUR_BOT_USERNAME" class="btn-primary">Launch Alien Intelligence →</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- FOOTER -->
+  <footer>
+    <div class="footer-logo">Alien Intelligence</div>
+    <div class="footer-links">
+      <a href="https://t.me/YOUR_BOT_USERNAME">Telegram</a>
+      <a href="https://x.com/Myke_Kript">Twitter</a>
+      <a href="#">Docs</a>
+      <a href="#">Terms</a>
+    </div>
+    <div class="footer-note">Trading involves risk. Past performance does not guarantee future results.</div>
+  </footer>
+
+</body>
+</html>
+
