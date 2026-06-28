@@ -1,0 +1,1275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Alien Intelligence</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:      #0A0A0F;
+      --surface: #111118;
+      --surf2:   #16161F;
+      --border:  rgba(255,255,255,0.07);
+      --border2: rgba(255,255,255,0.13);
+      --accent:  #5C6FFF;
+      --accent-d:rgba(92,111,255,0.15);
+      --green:   #4ADE80;
+      --red:     #F87171;
+      --yellow:  #FBBF24;
+      --white:   #E8E8F0;
+      --muted:   #666680;
+      --muted2:  #33334A;
+    }
+
+    html, body {
+      background: var(--bg);
+      color: var(--white);
+      font-family: 'Space Mono', monospace;
+      font-size: 13px;
+      line-height: 1.5;
+      min-height: 100vh;
+      overflow-x: hidden;
+      -webkit-font-smoothing: antialiased;
+      overscroll-behavior: none;
+    }
+
+    /* ── HEADER ── */
+    .header {
+      position: sticky; top: 0; z-index: 50;
+      background: rgba(10,10,15,0.95);
+      backdrop-filter: blur(20px);
+      border-bottom: 1px solid var(--border);
+      padding: 0.85rem 1rem;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+
+    .header-logo {
+      font-family: 'Syne', sans-serif;
+      font-weight: 800; font-size: 0.85rem;
+      letter-spacing: 0.04em;
+      display: flex; align-items: center; gap: 0.5rem;
+    }
+
+    .header-skull {
+      width: 22px; height: 22px;
+    }
+
+    .status-dot {
+      width: 7px; height: 7px; border-radius: 50%;
+      background: var(--green);
+      box-shadow: 0 0 6px var(--green);
+      animation: pulse-dot 2s ease-in-out infinite;
+    }
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; } 50% { opacity: 0.4; }
+    }
+
+    .header-right {
+      display: flex; align-items: center; gap: 0.75rem;
+    }
+
+    .status-label {
+      font-size: 0.6rem; color: var(--green);
+      letter-spacing: 0.1em; text-transform: uppercase;
+    }
+
+    /* ── NAV TABS ── */
+    .tabs {
+      display: grid; grid-template-columns: repeat(4, 1fr);
+      border-bottom: 1px solid var(--border);
+      background: var(--bg);
+      position: sticky; top: 53px; z-index: 40;
+    }
+
+    .tab {
+      padding: 0.7rem 0;
+      text-align: center;
+      font-size: 0.58rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--muted);
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      transition: color 0.15s, border-color 0.15s;
+      user-select: none;
+    }
+    .tab.active {
+      color: var(--accent);
+      border-bottom-color: var(--accent);
+    }
+    .tab-icon { font-size: 0.9rem; display: block; margin-bottom: 2px; }
+
+    /* ── SCREENS ── */
+    .screen { display: none; padding: 1rem; padding-bottom: 2rem; }
+    .screen.active { display: block; }
+
+    /* ── CARDS ── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      padding: 1rem;
+      margin-bottom: 0.75rem;
+    }
+
+    .card-header {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 0.75rem;
+    }
+
+    .card-label {
+      font-size: 0.58rem; letter-spacing: 0.14em;
+      text-transform: uppercase; color: var(--muted);
+    }
+
+    .card-title {
+      font-family: 'Syne', sans-serif;
+      font-weight: 700; font-size: 1rem;
+      color: var(--white);
+    }
+
+    /* ── DASHBOARD ── */
+    .summary-grid {
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: 0.5rem; margin-bottom: 0.75rem;
+    }
+
+    .summary-cell {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      padding: 0.85rem 0.75rem;
+    }
+
+    .summary-val {
+      font-family: 'Syne', sans-serif;
+      font-weight: 800; font-size: 1.3rem;
+      line-height: 1; margin-bottom: 0.25rem;
+    }
+    .summary-val.green { color: var(--green); }
+    .summary-val.red   { color: var(--red); }
+    .summary-val.acc   { color: var(--accent); }
+
+    .summary-key {
+      font-size: 0.58rem; color: var(--muted);
+      letter-spacing: 0.08em; text-transform: uppercase;
+    }
+
+    /* Auto-snipe toggle */
+    .toggle-row {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0.85rem 1rem;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      margin-bottom: 0.75rem;
+      cursor: pointer;
+    }
+
+    .toggle-info {}
+    .toggle-name {
+      font-size: 0.75rem; color: var(--white); margin-bottom: 2px;
+    }
+    .toggle-sub {
+      font-size: 0.6rem; color: var(--muted);
+    }
+
+    .toggle-switch {
+      width: 40px; height: 22px;
+      background: var(--muted2);
+      border-radius: 11px;
+      position: relative;
+      transition: background 0.2s;
+      flex-shrink: 0;
+    }
+    .toggle-switch.on { background: var(--accent); }
+    .toggle-switch::after {
+      content: '';
+      position: absolute;
+      width: 16px; height: 16px;
+      border-radius: 50%;
+      background: var(--white);
+      top: 3px; left: 3px;
+      transition: transform 0.2s;
+    }
+    .toggle-switch.on::after { transform: translateX(18px); }
+
+    /* Position rows */
+    .position-row {
+      padding: 0.85rem 0;
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .position-row:last-child { border-bottom: none; }
+
+    .pos-left {}
+    .pos-symbol {
+      font-family: 'Syne', sans-serif;
+      font-weight: 700; font-size: 0.85rem;
+      margin-bottom: 2px;
+    }
+    .pos-meta { font-size: 0.6rem; color: var(--muted); }
+
+    .pos-right { text-align: right; }
+    .pos-pnl {
+      font-family: 'Syne', sans-serif;
+      font-weight: 700; font-size: 0.9rem;
+      margin-bottom: 2px;
+    }
+    .pos-pnl.green { color: var(--green); }
+    .pos-pnl.red   { color: var(--red); }
+    .pos-price { font-size: 0.6rem; color: var(--muted); }
+
+    /* Dev watch badge */
+    .dev-badge {
+      font-size: 0.55rem;
+      background: rgba(92,111,255,0.15);
+      border: 1px solid rgba(92,111,255,0.3);
+      color: var(--accent);
+      padding: 1px 5px;
+      margin-left: 4px;
+    }
+
+    /* ── ANALYZE SCREEN ── */
+    .input-wrap {
+      position: relative; margin-bottom: 0.75rem;
+    }
+
+    .mint-input {
+      width: 100%;
+      background: var(--surface);
+      border: 1px solid var(--border2);
+      color: var(--white);
+      font-family: 'Space Mono', monospace;
+      font-size: 0.72rem;
+      padding: 0.85rem 3rem 0.85rem 0.85rem;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    .mint-input:focus { border-color: var(--accent); }
+    .mint-input::placeholder { color: var(--muted); }
+
+    .scan-btn {
+      position: absolute; right: 0; top: 0; bottom: 0;
+      padding: 0 1rem;
+      background: var(--accent);
+      border: none;
+      color: #fff;
+      font-family: 'Space Mono', monospace;
+      font-size: 0.65rem;
+      cursor: pointer;
+      transition: opacity 0.15s;
+    }
+    .scan-btn:hover { opacity: 0.85; }
+    .scan-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    /* Score ring */
+    .score-wrap {
+      display: flex; align-items: center; gap: 1rem;
+      margin-bottom: 1rem;
+    }
+
+    .score-ring-wrap {
+      position: relative; width: 80px; height: 80px; flex-shrink: 0;
+    }
+
+    .score-ring-svg { width: 80px; height: 80px; transform: rotate(-90deg); }
+
+    .score-ring-bg {
+      fill: none; stroke: var(--muted2); stroke-width: 6;
+    }
+
+    .score-ring-fill {
+      fill: none; stroke-width: 6;
+      stroke-linecap: butt;
+      stroke-dasharray: 201;
+      stroke-dashoffset: 201;
+      transition: stroke-dashoffset 1s ease, stroke 0.3s;
+    }
+
+    .score-center {
+      position: absolute; inset: 0;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+    }
+
+    .score-num {
+      font-family: 'Syne', sans-serif;
+      font-weight: 800; font-size: 1.1rem;
+      line-height: 1;
+    }
+
+    .score-label {
+      font-size: 0.5rem; color: var(--muted);
+      letter-spacing: 0.08em; text-transform: uppercase;
+    }
+
+    .score-info {}
+    .score-grade {
+      font-family: 'Syne', sans-serif;
+      font-weight: 700; font-size: 0.9rem;
+      margin-bottom: 0.2rem;
+    }
+    .score-mode {
+      font-size: 0.6rem; color: var(--muted);
+      margin-bottom: 0.4rem;
+    }
+    .score-verdict {
+      font-size: 0.65rem;
+    }
+
+    /* Breakdown bars */
+    .breakdown-row {
+      display: flex; align-items: center; gap: 0.5rem;
+      margin-bottom: 0.5rem;
+    }
+    .breakdown-label {
+      font-size: 0.6rem; color: var(--muted);
+      width: 75px; flex-shrink: 0;
+      text-transform: uppercase; letter-spacing: 0.05em;
+    }
+    .breakdown-track {
+      flex: 1; height: 3px;
+      background: var(--muted2);
+    }
+    .breakdown-fill {
+      height: 100%;
+      background: var(--accent);
+      transition: width 0.8s ease;
+    }
+    .breakdown-val {
+      font-size: 0.6rem; color: var(--muted);
+      width: 30px; text-align: right; flex-shrink: 0;
+    }
+
+    /* Token info grid */
+    .token-grid {
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: 0;
+    }
+    .token-cell {
+      padding: 0.6rem 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .token-cell:nth-child(odd) { padding-right: 0.5rem; }
+    .token-cell-key {
+      font-size: 0.55rem; color: var(--muted);
+      text-transform: uppercase; letter-spacing: 0.08em;
+      margin-bottom: 2px;
+    }
+    .token-cell-val {
+      font-size: 0.75rem; color: var(--white);
+    }
+
+    /* Failed filters */
+    .filter-fail {
+      font-size: 0.65rem; color: var(--red);
+      padding: 0.3rem 0;
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: flex-start; gap: 0.4rem;
+    }
+    .filter-fail:last-child { border-bottom: none; }
+
+    /* Snipe action bar */
+    .action-bar {
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: 0.5rem; margin-top: 0.75rem;
+    }
+
+    .action-btn {
+      padding: 0.85rem;
+      font-family: 'Space Mono', monospace;
+      font-size: 0.65rem;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      border: none; cursor: pointer;
+      transition: opacity 0.15s;
+    }
+    .action-btn:hover { opacity: 0.85; }
+    .action-btn.primary { background: var(--accent); color: #fff; }
+    .action-btn.secondary {
+      background: transparent;
+      border: 1px solid var(--border2);
+      color: var(--muted);
+    }
+    .action-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+    /* ── SETTINGS SCREEN ── */
+    .setting-row {
+      padding: 0.85rem 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .setting-row:last-child { border-bottom: none; }
+
+    .setting-top {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 0.5rem;
+    }
+
+    .setting-name {
+      font-size: 0.7rem; color: var(--white);
+    }
+
+    .setting-val {
+      font-size: 0.7rem; color: var(--accent);
+    }
+
+    .setting-slider {
+      width: 100%;
+      -webkit-appearance: none;
+      appearance: none;
+      height: 3px;
+      background: var(--muted2);
+      outline: none;
+    }
+    .setting-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 14px; height: 14px;
+      border-radius: 50%;
+      background: var(--accent);
+      cursor: pointer;
+    }
+
+    .setting-desc {
+      font-size: 0.58rem; color: var(--muted);
+      margin-top: 0.4rem;
+    }
+
+    .save-btn {
+      width: 100%;
+      padding: 0.85rem;
+      background: var(--accent);
+      border: none;
+      color: #fff;
+      font-family: 'Space Mono', monospace;
+      font-size: 0.7rem;
+      letter-spacing: 0.06em;
+      cursor: pointer;
+      margin-top: 1rem;
+      transition: opacity 0.15s;
+    }
+    .save-btn:hover { opacity: 0.85; }
+
+    /* ── HISTORY SCREEN ── */
+    .stat-row {
+      display: grid; grid-template-columns: repeat(3, 1fr);
+      gap: 0.5rem; margin-bottom: 0.75rem;
+    }
+
+    .stat-cell {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      padding: 0.75rem;
+      text-align: center;
+    }
+
+    .stat-cell-val {
+      font-family: 'Syne', sans-serif;
+      font-weight: 800; font-size: 1.1rem;
+      margin-bottom: 2px;
+    }
+    .stat-cell-val.green { color: var(--green); }
+    .stat-cell-val.red   { color: var(--red); }
+
+    .stat-cell-key {
+      font-size: 0.55rem; color: var(--muted);
+      letter-spacing: 0.08em; text-transform: uppercase;
+    }
+
+    .trade-row {
+      padding: 0.85rem 0;
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .trade-row:last-child { border-bottom: none; }
+
+    .trade-left {}
+    .trade-symbol {
+      font-family: 'Syne', sans-serif;
+      font-weight: 700; font-size: 0.8rem;
+      margin-bottom: 2px;
+    }
+    .trade-meta { font-size: 0.58rem; color: var(--muted); }
+
+    .trade-right { text-align: right; }
+    .trade-pnl {
+      font-family: 'Syne', sans-serif;
+      font-weight: 700; font-size: 0.85rem;
+      margin-bottom: 2px;
+    }
+    .trade-pnl.green { color: var(--green); }
+    .trade-pnl.red   { color: var(--red); }
+    .trade-reason { font-size: 0.58rem; color: var(--muted); }
+
+    /* Score badge */
+    .score-badge {
+      display: inline-block;
+      font-size: 0.55rem;
+      padding: 1px 5px;
+      margin-left: 4px;
+    }
+    .score-badge.s { background: rgba(74,222,128,0.15); color: var(--green); border: 1px solid rgba(74,222,128,0.3); }
+    .score-badge.a { background: rgba(92,111,255,0.15); color: var(--accent); border: 1px solid rgba(92,111,255,0.3); }
+    .score-badge.b { background: rgba(251,191,36,0.12); color: var(--yellow); border: 1px solid rgba(251,191,36,0.3); }
+    .score-badge.d { background: rgba(248,113,113,0.12); color: var(--red); border: 1px solid rgba(248,113,113,0.3); }
+
+    /* ── LOADING ── */
+    .loading {
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      padding: 3rem 1rem;
+      color: var(--muted);
+      gap: 0.75rem;
+    }
+
+    .loading-skull {
+      width: 40px; height: 40px;
+      animation: skull-spin 2s ease-in-out infinite;
+    }
+    @keyframes skull-spin {
+      0%, 100% { transform: scale(1); opacity: 1; }
+      50% { transform: scale(0.85); opacity: 0.5; }
+    }
+
+    .loading-text {
+      font-size: 0.65rem; letter-spacing: 0.1em;
+      text-transform: uppercase;
+      animation: blink-text 1.2s step-end infinite;
+    }
+    @keyframes blink-text { 50% { opacity: 0.3; } }
+
+    /* ── EMPTY STATE ── */
+    .empty {
+      text-align: center;
+      padding: 3rem 1rem;
+      color: var(--muted);
+    }
+    .empty-icon { font-size: 2rem; margin-bottom: 0.75rem; opacity: 0.4; }
+    .empty-text { font-size: 0.65rem; letter-spacing: 0.05em; }
+
+    /* ── TOAST ── */
+    .toast {
+      position: fixed; bottom: 1.5rem; left: 1rem; right: 1rem;
+      background: var(--surface);
+      border: 1px solid var(--border2);
+      padding: 0.85rem 1rem;
+      font-size: 0.68rem;
+      display: flex; align-items: center; gap: 0.5rem;
+      z-index: 100;
+      transform: translateY(100px);
+      opacity: 0;
+      transition: transform 0.25s ease, opacity 0.25s ease;
+    }
+    .toast.show { transform: translateY(0); opacity: 1; }
+    .toast.success { border-color: rgba(74,222,128,0.4); }
+    .toast.error   { border-color: rgba(248,113,113,0.4); }
+
+    /* ── GLITCH HEADER TEXT ── */
+    @keyframes glitch-mini {
+      0%, 90%, 100% { transform: translate(0); opacity: 1; }
+      92% { transform: translate(-2px, 0); opacity: 0.8; }
+      94% { transform: translate(2px, 0); opacity: 0.8; }
+      96% { transform: translate(0); opacity: 1; }
+    }
+    .logo-glitch { animation: glitch-mini 4s infinite; display: inline-block; }
+
+    /* Scanline on analyze result */
+    .result-scan {
+      position: relative; overflow: hidden;
+    }
+    .result-scan::after {
+      content: '';
+      position: absolute; left: 0; right: 0;
+      height: 40px;
+      background: linear-gradient(transparent, rgba(92,111,255,0.04), transparent);
+      animation: scan-pass 3s ease-in-out infinite;
+      pointer-events: none;
+    }
+    @keyframes scan-pass {
+      0%   { top: -40px; }
+      100% { top: 100%; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- HEADER -->
+  <div class="header">
+    <div class="header-logo">
+      <svg class="header-skull" viewBox="0 0 200 220" fill="none">
+        <path d="M 30 110 Q 25 60 100 25 Q 175 60 170 110 L 165 145 Q 160 160 100 162 Q 40 160 35 145 Z"
+              fill="#0D0D20" stroke="#5C6FFF" stroke-width="2"/>
+        <ellipse cx="68" cy="95" rx="22" ry="16" fill="#050510" stroke="#5C6FFF" stroke-width="1.5"/>
+        <ellipse cx="68" cy="95" rx="10" ry="7" fill="rgba(92,111,255,0.6)"/>
+        <ellipse cx="132" cy="95" rx="22" ry="16" fill="#050510" stroke="#5C6FFF" stroke-width="1.5"/>
+        <ellipse cx="132" cy="95" rx="10" ry="7" fill="rgba(92,111,255,0.6)"/>
+        <rect x="58" y="162" width="10" height="12" rx="1" fill="#0D0D20" stroke="#5C6FFF" stroke-width="1"/>
+        <rect x="72" y="162" width="10" height="14" rx="1" fill="#0D0D20" stroke="#5C6FFF" stroke-width="1"/>
+        <rect x="86" y="162" width="10" height="14" rx="1" fill="#0D0D20" stroke="#5C6FFF" stroke-width="1"/>
+        <rect x="100" y="162" width="10" height="14" rx="1" fill="#0D0D20" stroke="#5C6FFF" stroke-width="1"/>
+        <rect x="114" y="162" width="10" height="12" rx="1" fill="#0D0D20" stroke="#5C6FFF" stroke-width="1"/>
+      </svg>
+      <span class="logo-glitch">ALIEN INTELLIGENCE</span>
+    </div>
+    <div class="header-right">
+      <span class="status-label">LIVE</span>
+      <div class="status-dot"></div>
+    </div>
+  </div>
+
+  <!-- TABS -->
+  <div class="tabs">
+    <div class="tab active" onclick="showTab('dashboard')">
+      <span class="tab-icon">⚡</span>DASH
+    </div>
+    <div class="tab" onclick="showTab('analyze')">
+      <span class="tab-icon">🔍</span>SCAN
+    </div>
+    <div class="tab" onclick="showTab('settings')">
+      <span class="tab-icon">⚙️</span>CONFIG
+    </div>
+    <div class="tab" onclick="showTab('history')">
+      <span class="tab-icon">📈</span>HISTORY
+    </div>
+  </div>
+
+  <!-- ── DASHBOARD ── -->
+  <div class="screen active" id="screen-dashboard">
+
+    <!-- Summary -->
+    <div class="summary-grid">
+      <div class="summary-cell">
+        <div class="summary-val acc" id="dash-positions">0</div>
+        <div class="summary-key">Open Positions</div>
+      </div>
+      <div class="summary-cell">
+        <div class="summary-val green" id="dash-winrate">—</div>
+        <div class="summary-key">Win Rate</div>
+      </div>
+      <div class="summary-cell">
+        <div class="summary-val" id="dash-pnl">—</div>
+        <div class="summary-key">Total PnL (SOL)</div>
+      </div>
+      <div class="summary-cell">
+        <div class="summary-val acc" id="dash-devwatches">0</div>
+        <div class="summary-key">Dev Watches</div>
+      </div>
+    </div>
+
+    <!-- Auto-snipe toggle -->
+    <div class="toggle-row" onclick="toggleAutoSnipe()">
+      <div class="toggle-info">
+        <div class="toggle-name">Auto-Snipe</div>
+        <div class="toggle-sub" id="auto-sub">Off — tap to enable</div>
+      </div>
+      <div class="toggle-switch" id="auto-toggle"></div>
+    </div>
+
+    <!-- Open positions -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-label">Open Positions</div>
+        <div style="font-size:0.6rem;color:var(--muted)" id="pos-updated">—</div>
+      </div>
+      <div id="positions-list">
+        <div class="loading">
+          <svg class="loading-skull" viewBox="0 0 200 220" fill="none">
+            <path d="M 30 110 Q 25 60 100 25 Q 175 60 170 110 L 165 145 Q 160 160 100 162 Q 40 160 35 145 Z"
+                  fill="#0D0D20" stroke="#5C6FFF" stroke-width="2"/>
+            <ellipse cx="68" cy="95" rx="18" ry="13" fill="rgba(92,111,255,0.5)"/>
+            <ellipse cx="132" cy="95" rx="18" ry="13" fill="rgba(92,111,255,0.5)"/>
+          </svg>
+          <div class="loading-text">Scanning chain...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Migration listener status -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-label">Migration Listener</div>
+        <div style="font-size:0.6rem;color:var(--green)">WebSocket ⚡</div>
+      </div>
+      <div style="font-size:0.65rem;color:var(--muted);line-height:1.7">
+        Watching Raydium AMM v4 + CPMM pools.<br/>
+        Pump.fun migrations detected at block speed.<br/>
+        <span style="color:var(--accent)" id="migrations-seen">0</span> pools seen this session.
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ── ANALYZE ── -->
+  <div class="screen" id="screen-analyze">
+
+    <div class="input-wrap">
+      <input
+        class="mint-input"
+        id="mint-input"
+        type="text"
+        placeholder="Paste mint address..."
+        autocomplete="off"
+        autocorrect="off"
+        autocapitalize="off"
+        spellcheck="false"
+      />
+      <button class="scan-btn" id="scan-btn" onclick="runAnalysis()">SCAN</button>
+    </div>
+
+    <div id="analyze-result">
+      <div class="empty">
+        <div class="empty-icon">👾</div>
+        <div class="empty-text">Paste a Solana mint address above<br/>to run full analysis + conviction score</div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ── SETTINGS ── -->
+  <div class="screen" id="screen-settings">
+
+    <div class="card">
+      <div class="card-label" style="margin-bottom:0.75rem">Filter Settings</div>
+
+      <div class="setting-row">
+        <div class="setting-top">
+          <div class="setting-name">Min Liquidity</div>
+          <div class="setting-val">$<span id="liq-val">80,000</span></div>
+        </div>
+        <input type="range" class="setting-slider" id="liq-slider"
+               min="10000" max="200000" step="5000" value="80000"
+               oninput="updateSetting('liq', this.value)"/>
+        <div class="setting-desc">Minimum USD liquidity in the pool</div>
+      </div>
+
+      <div class="setting-row">
+        <div class="setting-top">
+          <div class="setting-name">Min Buy Ratio</div>
+          <div class="setting-val"><span id="buyratio-val">65</span>%</div>
+        </div>
+        <input type="range" class="setting-slider" id="buyratio-slider"
+               min="30" max="90" step="5" value="65"
+               oninput="updateSetting('buyratio', this.value)"/>
+        <div class="setting-desc">Minimum % of transactions that are buys (1h)</div>
+      </div>
+
+      <div class="setting-row">
+        <div class="setting-top">
+          <div class="setting-name">Max Top Holder</div>
+          <div class="setting-val"><span id="topholder-val">10</span>%</div>
+        </div>
+        <input type="range" class="setting-slider" id="topholder-slider"
+               min="5" max="50" step="5" value="10"
+               oninput="updateSetting('topholder', this.value)"/>
+        <div class="setting-desc">Max % a single wallet can hold</div>
+      </div>
+
+      <div class="setting-row">
+        <div class="setting-top">
+          <div class="setting-name">Min Token Age</div>
+          <div class="setting-val"><span id="age-val">300</span>s</div>
+        </div>
+        <input type="range" class="setting-slider" id="age-slider"
+               min="60" max="3600" step="60" value="300"
+               oninput="updateSetting('age', this.value)"/>
+        <div class="setting-desc">Minimum seconds since pair creation</div>
+      </div>
+
+    </div>
+
+    <div class="card">
+      <div class="card-label" style="margin-bottom:0.75rem">Trade Settings</div>
+
+      <div class="setting-row">
+        <div class="setting-top">
+          <div class="setting-name">Buy Amount</div>
+          <div class="setting-val"><span id="buy-val">0.5</span> SOL</div>
+        </div>
+        <input type="range" class="setting-slider" id="buy-slider"
+               min="0.05" max="5" step="0.05" value="0.5"
+               oninput="updateSetting('buy', this.value)"/>
+        <div class="setting-desc">SOL spent per snipe</div>
+      </div>
+
+      <div class="setting-row">
+        <div class="setting-top">
+          <div class="setting-name">Take Profit</div>
+          <div class="setting-val">+<span id="tp-val">100</span>%</div>
+        </div>
+        <input type="range" class="setting-slider" id="tp-slider"
+               min="20" max="500" step="10" value="100"
+               oninput="updateSetting('tp', this.value)"/>
+        <div class="setting-desc">Auto-sell at this % gain</div>
+      </div>
+
+      <div class="setting-row">
+        <div class="setting-top">
+          <div class="setting-name">Stop Loss</div>
+          <div class="setting-val">-<span id="sl-val">30</span>%</div>
+        </div>
+        <input type="range" class="setting-slider" id="sl-slider"
+               min="10" max="80" step="5" value="30"
+               oninput="updateSetting('sl', this.value)"/>
+        <div class="setting-desc">Auto-sell at this % loss</div>
+      </div>
+
+    </div>
+
+    <button class="save-btn" onclick="saveSettings()">Save Settings → Bot</button>
+
+  </div>
+
+  <!-- ── HISTORY ── -->
+  <div class="screen" id="screen-history">
+
+    <div class="stat-row">
+      <div class="stat-cell">
+        <div class="stat-cell-val green" id="hist-winrate">—</div>
+        <div class="stat-cell-key">Win Rate</div>
+      </div>
+      <div class="stat-cell">
+        <div class="stat-cell-val" id="hist-trades">0</div>
+        <div class="stat-cell-key">Total Trades</div>
+      </div>
+      <div class="stat-cell">
+        <div class="stat-cell-val" id="hist-pnl">—</div>
+        <div class="stat-cell-key">Total SOL</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-label" style="margin-bottom:0.75rem">Recent Trades</div>
+      <div id="history-list">
+        <div class="loading">
+          <svg class="loading-skull" viewBox="0 0 200 220" fill="none">
+            <path d="M 30 110 Q 25 60 100 25 Q 175 60 170 110 L 165 145 Q 160 160 100 162 Q 40 160 35 145 Z"
+                  fill="#0D0D20" stroke="#5C6FFF" stroke-width="2"/>
+            <ellipse cx="68" cy="95" rx="18" ry="13" fill="rgba(92,111,255,0.5)"/>
+            <ellipse cx="132" cy="95" rx="18" ry="13" fill="rgba(92,111,255,0.5)"/>
+          </svg>
+          <div class="loading-text">Loading history...</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- TOAST -->
+  <div class="toast" id="toast"></div>
+
+  <script>
+    // ── Telegram WebApp init ──────────────────────────────────────
+    const tg = window.Telegram?.WebApp;
+    if (tg) {
+      tg.ready();
+      tg.expand();
+      tg.setHeaderColor('#0A0A0F');
+      tg.setBackgroundColor('#0A0A0F');
+    }
+
+    const BOT_API = 'https://api.telegram.org/bot' + (tg?.initDataUnsafe?.bot?.id || '');
+
+    // ── State ─────────────────────────────────────────────────────
+    let autoSnipeOn = false;
+    let migrationsSeen = 0;
+    let currentAnalysis = null;
+
+    // Mock data for UI demo (replace with real bot API calls in production)
+    const mockPositions = [
+      { symbol: 'PEPEAI', entryPrice: 0.00000234, currentPrice: 0.00000412, pnl: 76.1, solSpent: 0.5, devWatch: true },
+      { symbol: 'MOONCAT', entryPrice: 0.0000089, currentPrice: 0.0000071, pnl: -20.2, solSpent: 0.5, devWatch: false },
+    ];
+
+    const mockHistory = [
+      { symbol: 'SOLBRO', pnl: 142.3, pnlSol: 0.71, reason: 'take_profit', score: 82, grade: 's', date: '2h ago' },
+      { symbol: 'FROGAI', pnl: -28.5, pnlSol: -0.14, reason: 'stop_loss', score: 54, grade: 'b', date: '5h ago' },
+      { symbol: 'PUMP3R', pnl: 211.0, pnlSol: 1.06, reason: 'take_profit', score: 91, grade: 's', date: '1d ago' },
+      { symbol: 'REKT', pnl: -30.0, pnlSol: -0.15, reason: 'dev_move', score: 38, grade: 'b', date: '1d ago' },
+      { symbol: 'ALIEN', pnl: 88.4, pnlSol: 0.44, reason: 'take_profit', score: 77, grade: 'a', date: '2d ago' },
+    ];
+
+    // ── Tab switching ─────────────────────────────────────────────
+    function showTab(name) {
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+      event.currentTarget.classList.add('active');
+      document.getElementById('screen-' + name).classList.add('active');
+      if (name === 'dashboard') loadDashboard();
+      if (name === 'history') loadHistory();
+    }
+
+    // ── Dashboard ─────────────────────────────────────────────────
+    function loadDashboard() {
+      const wins = mockHistory.filter(t => t.pnl > 0).length;
+      const total = mockHistory.length;
+      const totalPnl = mockHistory.reduce((s, t) => s + t.pnlSol, 0);
+
+      document.getElementById('dash-positions').textContent = mockPositions.length;
+      document.getElementById('dash-winrate').textContent = total > 0 ? ((wins/total)*100).toFixed(0) + '%' : '—';
+      document.getElementById('dash-pnl').textContent = totalPnl >= 0 ? '+' + totalPnl.toFixed(2) : totalPnl.toFixed(2);
+      document.getElementById('dash-pnl').className = 'summary-val ' + (totalPnl >= 0 ? 'green' : 'red');
+      document.getElementById('dash-devwatches').textContent = mockPositions.filter(p => p.devWatch).length;
+      document.getElementById('pos-updated').textContent = 'Updated just now';
+
+      renderPositions();
+    }
+
+    function renderPositions() {
+      const el = document.getElementById('positions-list');
+      if (!mockPositions.length) {
+        el.innerHTML = '<div class="empty"><div class="empty-icon">📊</div><div class="empty-text">No open positions</div></div>';
+        return;
+      }
+
+      el.innerHTML = mockPositions.map(p => `
+        <div class="position-row">
+          <div class="pos-left">
+            <div class="pos-symbol">
+              ${p.symbol}
+              ${p.devWatch ? '<span class="dev-badge">👁 DEV WATCH</span>' : ''}
+            </div>
+            <div class="pos-meta">Entry: $${p.entryPrice.toFixed(8)} · ${p.solSpent} SOL</div>
+          </div>
+          <div class="pos-right">
+            <div class="pos-pnl ${p.pnl >= 0 ? 'green' : 'red'}">${p.pnl >= 0 ? '+' : ''}${p.pnl.toFixed(1)}%</div>
+            <div class="pos-price">$${p.currentPrice.toFixed(8)}</div>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    // ── Auto-snipe toggle ─────────────────────────────────────────
+    function toggleAutoSnipe() {
+      autoSnipeOn = !autoSnipeOn;
+      const sw = document.getElementById('auto-toggle');
+      const sub = document.getElementById('auto-sub');
+      sw.classList.toggle('on', autoSnipeOn);
+      sub.textContent = autoSnipeOn ? 'On — scanning new pairs every 60s' : 'Off — tap to enable';
+
+      // Send command to bot via Telegram
+      if (tg) {
+        tg.sendData(JSON.stringify({ cmd: autoSnipeOn ? 'autoon' : 'autooff' }));
+      }
+      showToast(autoSnipeOn ? '✅ Auto-snipe enabled' : '🔴 Auto-snipe disabled', autoSnipeOn ? 'success' : '');
+    }
+
+    // ── Analyze ───────────────────────────────────────────────────
+    async function runAnalysis() {
+      const mint = document.getElementById('mint-input').value.trim();
+      if (!mint || mint.length < 32) {
+        showToast('❌ Invalid mint address', 'error');
+        return;
+      }
+
+      const btn = document.getElementById('scan-btn');
+      btn.disabled = true;
+      btn.textContent = '...';
+
+      document.getElementById('analyze-result').innerHTML = `
+        <div class="loading">
+          <svg class="loading-skull" viewBox="0 0 200 220" fill="none">
+            <path d="M 30 110 Q 25 60 100 25 Q 175 60 170 110 L 165 145 Q 160 160 100 162 Q 40 160 35 145 Z"
+                  fill="#0D0D20" stroke="#5C6FFF" stroke-width="2"/>
+            <ellipse cx="68" cy="95" rx="18" ry="13" fill="rgba(92,111,255,0.5)"/>
+            <ellipse cx="132" cy="95" rx="18" ry="13" fill="rgba(92,111,255,0.5)"/>
+          </svg>
+          <div class="loading-text">Running filters...</div>
+        </div>
+      `;
+
+      try {
+        // Fetch from DexScreener
+        const res = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${mint}`);
+        const data = await res.json();
+        const pairs = data?.pairs?.filter(p => p.chainId === 'solana') || [];
+
+        if (!pairs.length) {
+          document.getElementById('analyze-result').innerHTML = `
+            <div class="empty">
+              <div class="empty-icon">❌</div>
+              <div class="empty-text">No Solana pair found for this mint.<br/>Token may not be listed yet.</div>
+            </div>
+          `;
+          btn.disabled = false; btn.textContent = 'SCAN';
+          return;
+        }
+
+        const pair = pairs.sort((a, b) => (b.liquidity?.usd || 0) - (a.liquidity?.usd || 0))[0];
+        const liquidity = pair.liquidity?.usd || 0;
+        const mcap = pair.marketCap || 0;
+        const price = parseFloat(pair.priceUsd || '0');
+        const buys = pair.txns?.h1?.buys || 0;
+        const sells = pair.txns?.h1?.sells || 0;
+        const buyRatio = (buys + sells) > 0 ? (buys / (buys + sells) * 100) : 0;
+        const ageMs = Date.now() - (pair.pairCreatedAt || 0);
+        const ageSecs = Math.floor(ageMs / 1000);
+        const ageDisplay = ageSecs > 3600 ? Math.floor(ageSecs/3600) + 'h' : Math.floor(ageSecs/60) + 'm';
+        const name = pair.baseToken?.name || 'Unknown';
+        const symbol = pair.baseToken?.symbol || '???';
+
+        // Simple client-side scoring
+        let score = 0;
+        const fails = [];
+
+        // Liquidity
+        if (liquidity >= 200000) score += 20;
+        else if (liquidity >= 100000) score += 15;
+        else if (liquidity >= 50000) score += 10;
+        else if (liquidity >= 20000) score += 5;
+        else fails.push('Liquidity $' + Math.floor(liquidity).toLocaleString() + ' below minimum');
+
+        // Buy ratio
+        if (buyRatio >= 80) score += 15;
+        else if (buyRatio >= 70) score += 12;
+        else if (buyRatio >= 60) score += 8;
+        else if (buyRatio >= 50) score += 4;
+        else fails.push('Buy ratio ' + buyRatio.toFixed(1) + '% too low');
+
+        // Age
+        if (ageSecs >= 3600) score += 10;
+        else if (ageSecs >= 1800) score += 8;
+        else if (ageSecs >= 600) score += 6;
+        else if (ageSecs >= 300) score += 4;
+        else { score += 1; fails.push('Token only ' + ageDisplay + ' old'); }
+
+        // Simulate other scores
+        score += 15; // holders (neutral)
+        score += 10; // authority (neutral)
+        score += 10; // bundle (neutral — can't check from browser)
+        score += 5;  // top holder (neutral)
+
+        score = Math.min(100, score);
+
+        let grade, gradeClass, gradeColor;
+        if (score >= 80) { grade = 'S — HIGH CONVICTION'; gradeClass = 's'; gradeColor = 'var(--green)'; }
+        else if (score >= 65) { grade = 'A — STRONG'; gradeClass = 'a'; gradeColor = 'var(--accent)'; }
+        else if (score >= 50) { grade = 'B — MODERATE'; gradeClass = 'b'; gradeColor = 'var(--yellow)'; }
+        else if (score >= 35) { grade = 'C — WEAK'; gradeClass = 'b'; gradeColor = 'var(--yellow)'; }
+        else { grade = 'D — AVOID'; gradeClass = 'd'; gradeColor = 'var(--red)'; }
+
+        const pass = fails.length === 0;
+        const circumference = 201;
+        const offset = circumference - (score / 100) * circumference;
+
+        currentAnalysis = { mint, symbol, price, pass };
+
+        document.getElementById('analyze-result').innerHTML = `
+          <div class="card result-scan">
+            <div class="card-header">
+              <div>
+                <div class="card-label">Token Analysis</div>
+                <div class="card-title">${name} <span style="color:var(--muted);font-size:0.75rem">(${symbol})</span></div>
+              </div>
+              <div style="font-size:0.6rem;color:${pass ? 'var(--green)' : 'var(--red)'}">
+                ${pass ? '✅ PASS' : '❌ FAIL'}
+              </div>
+            </div>
+
+            <!-- Score ring -->
+            <div class="score-wrap">
+              <div class="score-ring-wrap">
+                <svg class="score-ring-svg" viewBox="0 0 80 80">
+                  <circle class="score-ring-bg" cx="40" cy="40" r="32"/>
+                  <circle class="score-ring-fill" cx="40" cy="40" r="32"
+                    id="score-circle"
+                    stroke="${gradeColor}"
+                    style="stroke-dashoffset:${offset}"/>
+                </svg>
+                <div class="score-center">
+                  <div class="score-num" style="color:${gradeColor}">${score}</div>
+                  <div class="score-label">/100</div>
+                </div>
+              </div>
+              <div class="score-info">
+                <div class="score-grade" style="color:${gradeColor}">${grade}</div>
+                <div class="score-mode">🛡️ Safety Mode</div>
+                <div class="score-verdict" style="color:${pass ? 'var(--green)' : 'var(--red)'}">
+                  ${pass ? 'Filters passed — safe to snipe' : fails.length + ' filter(s) failed'}
+                </div>
+              </div>
+            </div>
+
+            <!-- Breakdown -->
+            <div style="margin-bottom:1rem">
+              ${renderBar('Liquidity', score >= 15 ? 20 : score >= 10 ? 15 : score >= 5 ? 10 : 5, 20)}
+              ${renderBar('Buy Ratio', buyRatio >= 80 ? 15 : buyRatio >= 70 ? 12 : buyRatio >= 60 ? 8 : 4, 15)}
+              ${renderBar('Token Age', ageSecs >= 3600 ? 10 : ageSecs >= 600 ? 6 : 4, 10)}
+              ${renderBar('Bundle Chk', 10, 20)}
+              ${renderBar('Authority', 15, 15)}
+              ${renderBar('Top Holder', 5, 10)}
+            </div>
+
+            <!-- Token data -->
+            <div class="token-grid">
+              <div class="token-cell">
+                <div class="token-cell-key">Price</div>
+                <div class="token-cell-val">$${price.toFixed(8)}</div>
+              </div>
+              <div class="token-cell">
+                <div class="token-cell-key">Liquidity</div>
+                <div class="token-cell-val">$${Math.floor(liquidity).toLocaleString()}</div>
+              </div>
+              <div class="token-cell">
+                <div class="token-cell-key">Market Cap</div>
+                <div class="token-cell-val">$${Math.floor(mcap).toLocaleString()}</div>
+              </div>
+              <div class="token-cell">
+                <div class="token-cell-key">Age</div>
+                <div class="token-cell-val">${ageDisplay}</div>
+              </div>
+              <div class="token-cell">
+                <div class="token-cell-key">Buy Ratio</div>
+                <div class="token-cell-val">${buyRatio.toFixed(1)}%</div>
+              </div>
+              <div class="token-cell">
+                <div class="token-cell-key">Buys / Sells</div>
+                <div class="token-cell-val">${buys} / ${sells}</div>
+              </div>
+            </div>
+
+            ${fails.length ? `
+              <div style="margin-top:0.75rem;padding-top:0.75rem;border-top:1px solid var(--border)">
+                <div class="card-label" style="margin-bottom:0.5rem;color:var(--red)">Failed Filters</div>
+                ${fails.map(f => `<div class="filter-fail">✗ ${f}</div>`).join('')}
+              </div>
+            ` : ''}
+          </div>
+
+          <div class="action-bar">
+            <button class="action-btn primary" onclick="sendSnipe('${mint}', '${symbol}')" ${!pass ? 'disabled' : ''}>
+              🚀 Snipe ${symbol}
+            </button>
+            <button class="action-btn secondary" onclick="openChart('${pair.url || ''}')">
+              📊 Chart
+            </button>
+          </div>
+        `;
+
+      } catch (err) {
+        document.getElementById('analyze-result').innerHTML = `
+          <div class="empty">
+            <div class="empty-icon">⚠️</div>
+            <div class="empty-text">Analysis failed.<br/>${err.message}</div>
+          </div>
+        `;
+      }
+
+      btn.disabled = false;
+      btn.textContent = 'SCAN';
+    }
+
+    function renderBar(label, val, max) {
+      const pct = Math.min(100, (val / max) * 100);
+      return `
+        <div class="breakdown-row">
+          <div class="breakdown-label">${label}</div>
+          <div class="breakdown-track">
+            <div class="breakdown-fill" style="width:${pct}%"></div>
+          </div>
+          <div class="breakdown-val">${val}/${max}</div>
+        </div>
+      `;
+    }
+
+    function sendSnipe(mint, symbol) {
+      if (tg) {
+        tg.sendData(JSON.stringify({ cmd: 'snipe', mint, symbol }));
+        showToast('🛸 Snipe sent to bot', 'success');
+      } else {
+        showToast('⚠️ Open inside Telegram to snipe', 'error');
+      }
+    }
+
+    function openChart(url) {
+      if (url && tg) tg.openLink(url);
+      else if (url) window.open(url, '_blank');
+    }
+
+    // ── Settings ──────────────────────────────────────────────────
+    function updateSetting(key, val) {
+      const map = {
+        liq: { id: 'liq-val', fmt: v => parseInt(v).toLocaleString() },
+        buyratio: { id: 'buyratio-val', fmt: v => parseInt(v) },
+        topholder: { id: 'topholder-val', fmt: v => parseInt(v) },
+        age: { id: 'age-val', fmt: v => parseInt(v) },
+        buy: { id: 'buy-val', fmt: v => parseFloat(v).toFixed(2) },
+        tp: { id: 'tp-val', fmt: v => parseInt(v) },
+        sl: { id: 'sl-val', fmt: v => parseInt(v) },
+      };
+      const m = map[key];
+      if (m) document.getElementById(m.id).textContent = m.fmt(val);
+    }
+
+    function saveSettings() {
+      const settings = {
+        cmd: 'settings_update',
+        minLiquidity: parseInt(document.getElementById('liq-slider').value),
+        minBuyRatio: parseInt(document.getElementById('buyratio-slider').value),
+        maxTopHolderPercent: parseInt(document.getElementById('topholder-slider').value),
+        minTokenAgeSecs: parseInt(document.getElementById('age-slider').value),
+        buyAmountSol: parseFloat(document.getElementById('buy-slider').value),
+        takeProfitPercent: parseInt(document.getElementById('tp-slider').value),
+        stopLossPercent: parseInt(document.getElementById('sl-slider').value),
+      };
+
+      if (tg) {
+        tg.sendData(JSON.stringify(settings));
+        showToast('✅ Settings saved to bot', 'success');
+      } else {
+        showToast('⚠️ Open inside Telegram to save', 'error');
+      }
+    }
+
+    // ── History ───────────────────────────────────────────────────
+    function loadHistory() {
+      const wins = mockHistory.filter(t => t.pnl > 0).length;
+      const total = mockHistory.length;
+      const totalPnl = mockHistory.reduce((s, t) => s + t.pnlSol, 0);
+
+      document.getElementById('hist-winrate').textContent = ((wins/total)*100).toFixed(0) + '%';
+      document.getElementById('hist-winrate').className = 'stat-cell-val green';
+      document.getElementById('hist-trades').textContent = total;
+      document.getElementById('hist-pnl').textContent = (totalPnl >= 0 ? '+' : '') + totalPnl.toFixed(2);
+      document.getElementById('hist-pnl').className = 'stat-cell-val ' + (totalPnl >= 0 ? 'green' : 'red');
+
+      document.getElementById('history-list').innerHTML = mockHistory.map(t => `
+        <div class="trade-row">
+          <div class="trade-left">
+            <div class="trade-symbol">
+              ${t.symbol}
+              <span class="score-badge ${t.grade}">${t.score}</span>
+            </div>
+            <div class="trade-meta">${t.date}</div>
+          </div>
+          <div class="trade-right">
+            <div class="trade-pnl ${t.pnl >= 0 ? 'green' : 'red'}">${t.pnl >= 0 ? '+' : ''}${t.pnl.toFixed(1)}%</div>
+            <div class="trade-reason">${t.reason.replace('_', ' ')}</div>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    // ── Toast ─────────────────────────────────────────────────────
+    let toastTimer;
+    function showToast(msg, type = '') {
+      const el = document.getElementById('toast');
+      el.textContent = msg;
+      el.className = 'toast show ' + type;
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => { el.className = 'toast'; }, 2800);
+    }
+
+    // ── Migration counter simulation ──────────────────────────────
+    setInterval(() => {
+      migrationsSeen += Math.floor(Math.random() * 3);
+      const el = document.getElementById('migrations-seen');
+      if (el) el.textContent = migrationsSeen;
+    }, 8000);
+
+    // ── Init ──────────────────────────────────────────────────────
+    loadDashboard();
+  </script>
+</body>
+</html>
+
