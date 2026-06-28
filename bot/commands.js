@@ -1,4 +1,4 @@
-const { Telegraf, Markup } = require('telegraf');
+const { Markup } = require('telegraf');
 const CONFIG = require('../utils/config');
 const { runFilters } = require('../sniper/filters');
 const {
@@ -9,7 +9,7 @@ const {
 } = require('../sniper/solana');
 const { startDevWatch, stopDevWatch, devWatches } = require('../sniper/devwatch');
 const { scoreToken, formatScore } = require('../sniper/scorer');
-const { getStats, getRecentTrades } = require('../db/tradeHistory');
+const { getStats, getRecentTrades, logEntry } = require('../db/tradeHistory');
 
 const watchlist = new Set();
 let autoSnipeEnabled = false;
@@ -53,7 +53,8 @@ function setupCommands(bot) {
       `/set <key> <value> — Update a setting\n` +
       `/admin — Admin panel\n\n` +
       `Phase 1 — Solana mainnet active 🟢\n` +
-      `Migration listener — WebSocket active ⚡`
+      `Migration listener — WebSocket active ⚡\n\n` +
+      `📱 *Dashboard* — tap the menu button below`
     );
   });
 
@@ -191,8 +192,6 @@ function setupCommands(bot) {
         solSpent: userSettings.buyAmountSol,
       });
 
-      // Log to trade history
-      const { logEntry } = require('../db/tradeHistory');
       await logEntry({
         mint,
         symbol: data.symbol,
@@ -203,9 +202,8 @@ function setupCommands(bot) {
         convictionScore: score.score,
       });
 
-      // Start dev watch automatically
-      await startDevWatch(mint, data.symbol, async (msg) => {
-        ctx.replyWithMarkdown(msg, { disable_web_page_preview: true });
+      await startDevWatch(mint, data.symbol, async (devMsg) => {
+        ctx.replyWithMarkdown(devMsg, { disable_web_page_preview: true });
       }, false);
 
       await ctx.telegram.editMessageText(
@@ -243,7 +241,9 @@ function setupCommands(bot) {
   // ── /autooff ─────────────────────────────────────────────────
   bot.command('autooff', ownerOnly, (ctx) => {
     autoSnipeEnabled = false;
-    ctx.replyWithMarkdown('🔴 *Auto-snipe OFF*\nMonitoring paused. Migration alerts still active.');
+    ctx.replyWithMarkdown(
+      '🔴 *Auto-snipe OFF*\nMonitoring paused. Migration alerts still active.'
+    );
   });
 
   // ── /watchlist ───────────────────────────────────────────────
@@ -296,9 +296,9 @@ function setupCommands(bot) {
           : 'N/A';
         const sign = parseFloat(change) >= 0 ? '+' : '';
         const emoji = parseFloat(change) >= 0 ? '🟢' : '🔴';
-        const devWatching = devWatches.has(mint) ? '👁️' : '';
+        const devWatching = devWatches.has(mint) ? ' 👁️' : '';
         return (
-          `${emoji} *${pos.symbol}* ${devWatching}\n` +
+          `${emoji} *${pos.symbol}*${devWatching}\n` +
           `  Entry: $${pos.entryPrice?.toFixed(8) || '?'}\n` +
           `  Now: $${currentPrice?.toFixed(8) || '?'}\n` +
           `  PnL: ${sign}${change}%\n` +
@@ -356,8 +356,9 @@ function setupCommands(bot) {
     if (sub === 'start' && mint) {
       const pos = activePositions.get(mint);
       const symbol = pos?.symbol || 'Unknown';
-      await startDevWatch(mint, symbol, (msg) =>
-        ctx.replyWithMarkdown(msg, { disable_web_page_preview: true }),
+      await startDevWatch(
+        mint, symbol,
+        (msg) => ctx.replyWithMarkdown(msg, { disable_web_page_preview: true }),
         autoSell
       );
       return;
@@ -466,6 +467,64 @@ function setupCommands(bot) {
       `Phase 4: Base chain + whale tracker\n` +
       `Phase 5: Public launch`
     );
+  });
+
+  // ── Web App Data Handler ─────────────────────────────────────
+  bot.on('web_app_data', ownerOnly, async (ctx) => {
+    let data;
+    try {
+      data = JSON.parse(ctx.webAppData.data.text());
+    } catch {
+      return ctx.reply('❌ Invalid data from Mini App');
+    }
+
+    const cmd = data.cmd;
+
+    // Auto-snipe toggle
+    if (cmd === 'autoon') {
+      autoSnipeEnabled = true;
+      return ctx.replyWithMarkdown(
+        `🤖 *Auto-snipe ON* via Dashboard\n\n` +
+        `Monitoring new pairs every 60s.\n` +
+        `Migration WebSocket active ⚡`
+      );
+    }
+
+    if (cmd === 'autooff') {
+      autoSnipeEnabled = false;
+      return ctx.replyWithMarkdown('🔴 *Auto-snipe OFF* via Dashboard');
+    }
+
+    // Snipe from Mini App
+    if (cmd === 'snipe' && data.mint) {
+      await ctx.replyWithMarkdown(
+        `🛸 *Snipe initiated from Dashboard*\n\n` +
+        `Token: *${data.symbol || data.mint.slice(0, 8)}*\n` +
+        `Running filters...`
+      );
+      await executeSnipe(ctx, data.mint);
+      return;
+    }
+
+    // Settings update from Mini App
+    if (cmd === 'settings_update') {
+      const updates = [];
+
+      if (data.minLiquidity)        { userSettings.minLiquidity = data.minLiquidity; updates.push(`Min Liquidity → $${data.minLiquidity.toLocaleString()}`); }
+      if (data.minBuyRatio)         { userSettings.minBuyRatio = data.minBuyRatio; updates.push(`Min Buy Ratio → ${data.minBuyRatio}%`); }
+      if (data.maxTopHolderPercent) { userSettings.maxTopHolderPercent = data.maxTopHolderPercent; updates.push(`Max Top Holder → ${data.maxTopHolderPercent}%`); }
+      if (data.minTokenAgeSecs)     { userSettings.minTokenAgeSecs = data.minTokenAgeSecs; updates.push(`Min Token Age → ${data.minTokenAgeSecs}s`); }
+      if (data.buyAmountSol)        { userSettings.buyAmountSol = data.buyAmountSol; updates.push(`Buy Amount → ${data.buyAmountSol} SOL`); }
+      if (data.takeProfitPercent)   { userSettings.takeProfitPercent = data.takeProfitPercent; updates.push(`Take Profit → +${data.takeProfitPercent}%`); }
+      if (data.stopLossPercent)     { userSettings.stopLossPercent = data.stopLossPercent; updates.push(`Stop Loss → -${data.stopLossPercent}%`); }
+
+      return ctx.replyWithMarkdown(
+        `⚙️ *Settings updated via Dashboard*\n\n` +
+        updates.map(u => `✅ ${u}`).join('\n')
+      );
+    }
+
+    ctx.reply('❓ Unknown Mini App command: ' + cmd);
   });
 
   // ── Catch unknown commands ───────────────────────────────────
