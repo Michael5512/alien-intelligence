@@ -240,10 +240,7 @@ function startApiServer() {
   app.use('/api', apiRouter);
 
   // Expose autoSnipeEnabled globally for API
-  Object.defineProperty(global, 'autoSnipeEnabled', {
-    get: () => getAutoSnipeEnabled(),
-    configurable: true,
-  });
+  global.getAutoSnipeEnabled = getAutoSnipeEnabled;
 
   const PORT = process.env.PORT || 3000;
   app.listen(PORT, () => {
