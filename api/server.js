@@ -88,7 +88,7 @@ router.get('/stats', async (req, res) => {
       success: true,
       openPositions: activePositions.size,
       devWatches: devWatches.size,
-      autoSnipeEnabled: global.autoSnipeEnabled || false,
+      autoSnipeEnabled: global.getAutoSnipeEnabled ? global.getAutoSnipeEnabled() : false,
       ...stats,
     });
   } catch (err) {
