@@ -859,416 +859,387 @@
   <div class="toast" id="toast"></div>
 
   <script>
-    // ── Telegram WebApp init ──────────────────────────────────────
-    const tg = window.Telegram?.WebApp;
-    if (tg) {
-      tg.ready();
-      tg.expand();
-      tg.setHeaderColor('#0A0A0F');
-      tg.setBackgroundColor('#0A0A0F');
+  // ── Telegram WebApp SDK fallback ──────────────────────────────
+  window.Telegram = window.Telegram || { WebApp: {
+    ready: () => {},
+    expand: () => {},
+    setHeaderColor: () => {},
+    setBackgroundColor: () => {},
+    sendData: (d) => console.log('sendData:', d),
+    openLink: (url) => window.open(url, '_blank'),
+    initDataUnsafe: {},
+    close: () => {}
+  }};
+
+  const tg = window.Telegram?.WebApp;
+  if (tg) {
+    tg.ready();
+    tg.expand();
+    tg.setHeaderColor('#0A0A0F');
+    tg.setBackgroundColor('#0A0A0F');
+  }
+
+  // ── API Config — update with your Railway URL ─────────────────
+  const API_BASE = 'https://YOUR-RAILWAY-URL.up.railway.app/api';
+
+  // ── State ─────────────────────────────────────────────────────
+  let autoSnipeOn = false;
+  let currentAnalysis = null;
+  let realPositions = [];
+
+  // ── Fetch helper ──────────────────────────────────────────────
+  async function fetchAPI(endpoint) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
+    try {
+      const res = await fetch(API_BASE + endpoint, { signal: controller.signal });
+      clearTimeout(timeout);
+      return await res.json();
+    } catch (err) {
+      clearTimeout(timeout);
+      return null;
     }
+  }
 
-    const BOT_API = 'https://api.telegram.org/bot' + (tg?.initDataUnsafe?.bot?.id || '');
+  // ── Tab switching ─────────────────────────────────────────────
+  function showTab(name) {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+    event.currentTarget.classList.add('active');
+    document.getElementById('screen-' + name).classList.add('active');
+    if (name === 'dashboard') loadDashboard();
+    if (name === 'history') loadHistory();
+  }
 
-    // ── State ─────────────────────────────────────────────────────
-    let autoSnipeOn = false;
-    let migrationsSeen = 0;
-    let currentAnalysis = null;
+  // ── Dashboard ─────────────────────────────────────────────────
+  async function loadDashboard() {
+    const [statsData, posData] = await Promise.all([
+      fetchAPI('/stats'),
+      fetchAPI('/positions'),
+    ]);
 
-    // Mock data for UI demo (replace with real bot API calls in production)
-    const mockPositions = [
-      { symbol: 'PEPEAI', entryPrice: 0.00000234, currentPrice: 0.00000412, pnl: 76.1, solSpent: 0.5, devWatch: true },
-      { symbol: 'MOONCAT', entryPrice: 0.0000089, currentPrice: 0.0000071, pnl: -20.2, solSpent: 0.5, devWatch: false },
-    ];
-
-    const mockHistory = [
-      { symbol: 'SOLBRO', pnl: 142.3, pnlSol: 0.71, reason: 'take_profit', score: 82, grade: 's', date: '2h ago' },
-      { symbol: 'FROGAI', pnl: -28.5, pnlSol: -0.14, reason: 'stop_loss', score: 54, grade: 'b', date: '5h ago' },
-      { symbol: 'PUMP3R', pnl: 211.0, pnlSol: 1.06, reason: 'take_profit', score: 91, grade: 's', date: '1d ago' },
-      { symbol: 'REKT', pnl: -30.0, pnlSol: -0.15, reason: 'dev_move', score: 38, grade: 'b', date: '1d ago' },
-      { symbol: 'ALIEN', pnl: 88.4, pnlSol: 0.44, reason: 'take_profit', score: 77, grade: 'a', date: '2d ago' },
-    ];
-
-    // ── Tab switching ─────────────────────────────────────────────
-    function showTab(name) {
-      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-      document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
-      event.currentTarget.classList.add('active');
-      document.getElementById('screen-' + name).classList.add('active');
-      if (name === 'dashboard') loadDashboard();
-      if (name === 'history') loadHistory();
-    }
-
-    // ── Dashboard ─────────────────────────────────────────────────
-    function loadDashboard() {
-      const wins = mockHistory.filter(t => t.pnl > 0).length;
-      const total = mockHistory.length;
-      const totalPnl = mockHistory.reduce((s, t) => s + t.pnlSol, 0);
-
-      document.getElementById('dash-positions').textContent = mockPositions.length;
-      document.getElementById('dash-winrate').textContent = total > 0 ? ((wins/total)*100).toFixed(0) + '%' : '—';
-      document.getElementById('dash-pnl').textContent = totalPnl >= 0 ? '+' + totalPnl.toFixed(2) : totalPnl.toFixed(2);
-      document.getElementById('dash-pnl').className = 'summary-val ' + (totalPnl >= 0 ? 'green' : 'red');
-      document.getElementById('dash-devwatches').textContent = mockPositions.filter(p => p.devWatch).length;
-      document.getElementById('pos-updated').textContent = 'Updated just now';
-
-      renderPositions();
-    }
-
-    function renderPositions() {
-      const el = document.getElementById('positions-list');
-      if (!mockPositions.length) {
-        el.innerHTML = '<div class="empty"><div class="empty-icon">📊</div><div class="empty-text">No open positions</div></div>';
-        return;
-      }
-
-      el.innerHTML = mockPositions.map(p => `
-        <div class="position-row">
-          <div class="pos-left">
-            <div class="pos-symbol">
-              ${p.symbol}
-              ${p.devWatch ? '<span class="dev-badge">👁 DEV WATCH</span>' : ''}
-            </div>
-            <div class="pos-meta">Entry: $${p.entryPrice.toFixed(8)} · ${p.solSpent} SOL</div>
-          </div>
-          <div class="pos-right">
-            <div class="pos-pnl ${p.pnl >= 0 ? 'green' : 'red'}">${p.pnl >= 0 ? '+' : ''}${p.pnl.toFixed(1)}%</div>
-            <div class="pos-price">$${p.currentPrice.toFixed(8)}</div>
-          </div>
-        </div>
-      `).join('');
-    }
-
-    // ── Auto-snipe toggle ─────────────────────────────────────────
-    function toggleAutoSnipe() {
-      autoSnipeOn = !autoSnipeOn;
+    if (statsData?.success) {
+      autoSnipeOn = statsData.autoSnipeEnabled || false;
+      document.getElementById('dash-positions').textContent = statsData.openPositions || 0;
+      document.getElementById('dash-winrate').textContent = statsData.winRate ? statsData.winRate + '%' : '—';
+      const pnl = parseFloat(statsData.totalPnlSol || 0);
+      document.getElementById('dash-pnl').textContent = (pnl >= 0 ? '+' : '') + pnl.toFixed(2);
+      document.getElementById('dash-pnl').className = 'summary-val ' + (pnl >= 0 ? 'green' : 'red');
+      document.getElementById('dash-devwatches').textContent = statsData.devWatches || 0;
       const sw = document.getElementById('auto-toggle');
       const sub = document.getElementById('auto-sub');
       sw.classList.toggle('on', autoSnipeOn);
       sub.textContent = autoSnipeOn ? 'On — scanning new pairs every 60s' : 'Off — tap to enable';
-
-      // Send command to bot via Telegram
-      if (tg) {
-        tg.sendData(JSON.stringify({ cmd: autoSnipeOn ? 'autoon' : 'autooff' }));
-      }
-      showToast(autoSnipeOn ? '✅ Auto-snipe enabled' : '🔴 Auto-snipe disabled', autoSnipeOn ? 'success' : '');
     }
 
-    // ── Analyze ───────────────────────────────────────────────────
-    async function runAnalysis() {
-      const mint = document.getElementById('mint-input').value.trim();
-      if (!mint || mint.length < 32) {
-        showToast('❌ Invalid mint address', 'error');
-        return;
+    if (posData?.success) {
+      realPositions = posData.positions || [];
+      document.getElementById('pos-updated').textContent = 'Updated just now';
+      renderPositions();
+    }
+  }
+
+  function renderPositions() {
+    const el = document.getElementById('positions-list');
+    if (!realPositions.length) {
+      el.innerHTML = '<div class="empty"><div class="empty-icon">📊</div><div class="empty-text">No open positions</div></div>';
+      return;
+    }
+    el.innerHTML = realPositions.map(p => {
+      const pnl = p.pnlPercent;
+      const devInfo = p.devWatch?.active
+        ? `<span class="dev-badge">👁 DEV WATCH${p.devWatch.dropPercent > 0 ? ' -' + p.devWatch.dropPercent + '%' : ''}</span>`
+        : '';
+      return `
+        <div class="position-row">
+          <div class="pos-left">
+            <div class="pos-symbol">${p.symbol} ${devInfo}</div>
+            <div class="pos-meta">Entry: $${p.entryPrice?.toFixed(8)} · ${p.solSpent} SOL</div>
+            ${p.devWatch?.active ? `<div class="pos-meta" style="color:var(--accent)">Dev: ${p.devWatch.devWallet?.slice(0,8)}... · ${p.devWatch.lastBalance?.toLocaleString()} tokens</div>` : ''}
+          </div>
+          <div class="pos-right">
+            <div class="pos-pnl ${pnl >= 0 ? 'green' : 'red'}">${pnl >= 0 ? '+' : ''}${pnl?.toFixed(1) || '?'}%</div>
+            <div class="pos-price">$${p.currentPrice?.toFixed(8) || '?'}</div>
+          </div>
+        </div>`;
+    }).join('');
+  }
+
+  // ── Auto-snipe toggle ─────────────────────────────────────────
+  function toggleAutoSnipe() {
+    autoSnipeOn = !autoSnipeOn;
+    const sw = document.getElementById('auto-toggle');
+    const sub = document.getElementById('auto-sub');
+    sw.classList.toggle('on', autoSnipeOn);
+    sub.textContent = autoSnipeOn ? 'On — scanning new pairs every 60s' : 'Off — tap to enable';
+    if (tg) tg.sendData(JSON.stringify({ cmd: autoSnipeOn ? 'autoon' : 'autooff' }));
+    showToast(autoSnipeOn ? '✅ Auto-snipe enabled' : '🔴 Auto-snipe disabled', autoSnipeOn ? 'success' : '');
+  }
+
+  // ── Analyze ───────────────────────────────────────────────────
+  async function runAnalysis() {
+    const mint = document.getElementById('mint-input').value.trim();
+    if (!mint || mint.length < 32) { showToast('❌ Invalid mint address', 'error'); return; }
+
+    const btn = document.getElementById('scan-btn');
+    btn.disabled = true; btn.textContent = '...';
+
+    document.getElementById('analyze-result').innerHTML = `
+      <div class="loading">
+        <svg class="loading-skull" viewBox="0 0 200 220" fill="none">
+          <path d="M 30 110 Q 25 60 100 25 Q 175 60 170 110 L 165 145 Q 160 160 100 162 Q 40 160 35 145 Z"
+                fill="#0D0D20" stroke="#5C6FFF" stroke-width="2"/>
+          <ellipse cx="68" cy="95" rx="18" ry="13" fill="rgba(92,111,255,0.5)"/>
+          <ellipse cx="132" cy="95" rx="18" ry="13" fill="rgba(92,111,255,0.5)"/>
+        </svg>
+        <div class="loading-text">Running filters...</div>
+      </div>`;
+
+    try {
+      const res = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${mint}`);
+      const data = await res.json();
+      const pairs = data?.pairs?.filter(p => p.chainId === 'solana') || [];
+
+      if (!pairs.length) {
+        document.getElementById('analyze-result').innerHTML =
+          '<div class="empty"><div class="empty-icon">❌</div><div class="empty-text">No Solana pair found.</div></div>';
+        btn.disabled = false; btn.textContent = 'SCAN'; return;
       }
 
-      const btn = document.getElementById('scan-btn');
-      btn.disabled = true;
-      btn.textContent = '...';
+      const pair = pairs.sort((a, b) => (b.liquidity?.usd || 0) - (a.liquidity?.usd || 0))[0];
+      const liquidity = pair.liquidity?.usd || 0;
+      const mcap = pair.marketCap || 0;
+      const price = parseFloat(pair.priceUsd || '0');
+      const buys = pair.txns?.h1?.buys || 0;
+      const sells = pair.txns?.h1?.sells || 0;
+      const buyRatio = (buys + sells) > 0 ? (buys / (buys + sells) * 100) : 0;
+      const ageMs = Date.now() - (pair.pairCreatedAt || 0);
+      const ageSecs = Math.floor(ageMs / 1000);
+      const ageDisplay = ageSecs > 3600 ? Math.floor(ageSecs/3600) + 'h' : Math.floor(ageSecs/60) + 'm';
+      const name = pair.baseToken?.name || 'Unknown';
+      const symbol = pair.baseToken?.symbol || '???';
+
+      let score = 0;
+      const fails = [];
+
+      if (liquidity >= 200000) score += 20;
+      else if (liquidity >= 100000) score += 15;
+      else if (liquidity >= 50000) score += 10;
+      else if (liquidity >= 20000) score += 5;
+      else fails.push('Liquidity $' + Math.floor(liquidity).toLocaleString() + ' below minimum');
+
+      if (buyRatio >= 80) score += 15;
+      else if (buyRatio >= 70) score += 12;
+      else if (buyRatio >= 60) score += 8;
+      else if (buyRatio >= 50) score += 4;
+      else fails.push('Buy ratio ' + buyRatio.toFixed(1) + '% too low');
+
+      if (ageSecs >= 3600) score += 10;
+      else if (ageSecs >= 600) score += 6;
+      else if (ageSecs >= 300) score += 4;
+      else { score += 1; fails.push('Token only ' + ageDisplay + ' old'); }
+
+      score += 15 + 10 + 10 + 5;
+      score = Math.min(100, score);
+
+      let grade, gradeColor;
+      if (score >= 80) { grade = 'S — HIGH CONVICTION'; gradeColor = 'var(--green)'; }
+      else if (score >= 65) { grade = 'A — STRONG'; gradeColor = 'var(--accent)'; }
+      else if (score >= 50) { grade = 'B — MODERATE'; gradeColor = 'var(--yellow)'; }
+      else { grade = 'D — AVOID'; gradeColor = 'var(--red)'; }
+
+      const pass = fails.length === 0;
+      const offset = 201 - (score / 100) * 201;
+      currentAnalysis = { mint, symbol, price, pass };
 
       document.getElementById('analyze-result').innerHTML = `
-        <div class="loading">
-          <svg class="loading-skull" viewBox="0 0 200 220" fill="none">
-            <path d="M 30 110 Q 25 60 100 25 Q 175 60 170 110 L 165 145 Q 160 160 100 162 Q 40 160 35 145 Z"
-                  fill="#0D0D20" stroke="#5C6FFF" stroke-width="2"/>
-            <ellipse cx="68" cy="95" rx="18" ry="13" fill="rgba(92,111,255,0.5)"/>
-            <ellipse cx="132" cy="95" rx="18" ry="13" fill="rgba(92,111,255,0.5)"/>
-          </svg>
-          <div class="loading-text">Running filters...</div>
+        <div class="card result-scan">
+          <div class="card-header">
+            <div>
+              <div class="card-label">Token Analysis</div>
+              <div class="card-title">${name} <span style="color:var(--muted);font-size:0.75rem">(${symbol})</span></div>
+            </div>
+            <div style="font-size:0.6rem;color:${pass ? 'var(--green)' : 'var(--red)'}">
+              ${pass ? '✅ PASS' : '❌ FAIL'}
+            </div>
+          </div>
+          <div class="score-wrap">
+            <div class="score-ring-wrap">
+              <svg class="score-ring-svg" viewBox="0 0 80 80">
+                <circle class="score-ring-bg" cx="40" cy="40" r="32"/>
+                <circle class="score-ring-fill" cx="40" cy="40" r="32"
+                  stroke="${gradeColor}" style="stroke-dashoffset:${offset}"/>
+              </svg>
+              <div class="score-center">
+                <div class="score-num" style="color:${gradeColor}">${score}</div>
+                <div class="score-label">/100</div>
+              </div>
+            </div>
+            <div class="score-info">
+              <div class="score-grade" style="color:${gradeColor}">${grade}</div>
+              <div class="score-mode">🛡️ Safety Mode</div>
+              <div class="score-verdict" style="color:${pass ? 'var(--green)' : 'var(--red)'}">
+                ${pass ? 'Filters passed' : fails.length + ' filter(s) failed'}
+              </div>
+            </div>
+          </div>
+          <div style="margin-bottom:1rem">
+            ${renderBar('Liquidity', liquidity >= 100000 ? 20 : liquidity >= 50000 ? 10 : 5, 20)}
+            ${renderBar('Buy Ratio', buyRatio >= 70 ? 15 : buyRatio >= 50 ? 8 : 4, 15)}
+            ${renderBar('Token Age', ageSecs >= 3600 ? 10 : ageSecs >= 300 ? 4 : 1, 10)}
+            ${renderBar('Bundle Chk', 10, 20)}
+            ${renderBar('Authority', 15, 15)}
+            ${renderBar('Top Holder', 5, 10)}
+          </div>
+          <div class="token-grid">
+            <div class="token-cell"><div class="token-cell-key">Price</div><div class="token-cell-val">$${price.toFixed(8)}</div></div>
+            <div class="token-cell"><div class="token-cell-key">Liquidity</div><div class="token-cell-val">$${Math.floor(liquidity).toLocaleString()}</div></div>
+            <div class="token-cell"><div class="token-cell-key">Market Cap</div><div class="token-cell-val">$${Math.floor(mcap).toLocaleString()}</div></div>
+            <div class="token-cell"><div class="token-cell-key">Age</div><div class="token-cell-val">${ageDisplay}</div></div>
+            <div class="token-cell"><div class="token-cell-key">Buy Ratio</div><div class="token-cell-val">${buyRatio.toFixed(1)}%</div></div>
+            <div class="token-cell"><div class="token-cell-key">Buys/Sells</div><div class="token-cell-val">${buys}/${sells}</div></div>
+          </div>
+          ${fails.length ? `
+            <div style="margin-top:0.75rem;padding-top:0.75rem;border-top:1px solid var(--border)">
+              <div class="card-label" style="margin-bottom:0.5rem;color:var(--red)">Failed Filters</div>
+              ${fails.map(f => `<div class="filter-fail">✗ ${f}</div>`).join('')}
+            </div>` : ''}
         </div>
-      `;
+        <div class="action-bar">
+          <button class="action-btn primary" onclick="sendSnipe('${mint}','${symbol}')" ${!pass ? 'disabled' : ''}>
+            🚀 Snipe ${symbol}
+          </button>
+          <button class="action-btn secondary" onclick="openChart('${pair.url || ''}')">
+            📊 Chart
+          </button>
+        </div>`;
 
-      try {
-        // Fetch from DexScreener
-        const res = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${mint}`);
-        const data = await res.json();
-        const pairs = data?.pairs?.filter(p => p.chainId === 'solana') || [];
-
-        if (!pairs.length) {
-          document.getElementById('analyze-result').innerHTML = `
-            <div class="empty">
-              <div class="empty-icon">❌</div>
-              <div class="empty-text">No Solana pair found for this mint.<br/>Token may not be listed yet.</div>
-            </div>
-          `;
-          btn.disabled = false; btn.textContent = 'SCAN';
-          return;
-        }
-
-        const pair = pairs.sort((a, b) => (b.liquidity?.usd || 0) - (a.liquidity?.usd || 0))[0];
-        const liquidity = pair.liquidity?.usd || 0;
-        const mcap = pair.marketCap || 0;
-        const price = parseFloat(pair.priceUsd || '0');
-        const buys = pair.txns?.h1?.buys || 0;
-        const sells = pair.txns?.h1?.sells || 0;
-        const buyRatio = (buys + sells) > 0 ? (buys / (buys + sells) * 100) : 0;
-        const ageMs = Date.now() - (pair.pairCreatedAt || 0);
-        const ageSecs = Math.floor(ageMs / 1000);
-        const ageDisplay = ageSecs > 3600 ? Math.floor(ageSecs/3600) + 'h' : Math.floor(ageSecs/60) + 'm';
-        const name = pair.baseToken?.name || 'Unknown';
-        const symbol = pair.baseToken?.symbol || '???';
-
-        // Simple client-side scoring
-        let score = 0;
-        const fails = [];
-
-        // Liquidity
-        if (liquidity >= 200000) score += 20;
-        else if (liquidity >= 100000) score += 15;
-        else if (liquidity >= 50000) score += 10;
-        else if (liquidity >= 20000) score += 5;
-        else fails.push('Liquidity $' + Math.floor(liquidity).toLocaleString() + ' below minimum');
-
-        // Buy ratio
-        if (buyRatio >= 80) score += 15;
-        else if (buyRatio >= 70) score += 12;
-        else if (buyRatio >= 60) score += 8;
-        else if (buyRatio >= 50) score += 4;
-        else fails.push('Buy ratio ' + buyRatio.toFixed(1) + '% too low');
-
-        // Age
-        if (ageSecs >= 3600) score += 10;
-        else if (ageSecs >= 1800) score += 8;
-        else if (ageSecs >= 600) score += 6;
-        else if (ageSecs >= 300) score += 4;
-        else { score += 1; fails.push('Token only ' + ageDisplay + ' old'); }
-
-        // Simulate other scores
-        score += 15; // holders (neutral)
-        score += 10; // authority (neutral)
-        score += 10; // bundle (neutral — can't check from browser)
-        score += 5;  // top holder (neutral)
-
-        score = Math.min(100, score);
-
-        let grade, gradeClass, gradeColor;
-        if (score >= 80) { grade = 'S — HIGH CONVICTION'; gradeClass = 's'; gradeColor = 'var(--green)'; }
-        else if (score >= 65) { grade = 'A — STRONG'; gradeClass = 'a'; gradeColor = 'var(--accent)'; }
-        else if (score >= 50) { grade = 'B — MODERATE'; gradeClass = 'b'; gradeColor = 'var(--yellow)'; }
-        else if (score >= 35) { grade = 'C — WEAK'; gradeClass = 'b'; gradeColor = 'var(--yellow)'; }
-        else { grade = 'D — AVOID'; gradeClass = 'd'; gradeColor = 'var(--red)'; }
-
-        const pass = fails.length === 0;
-        const circumference = 201;
-        const offset = circumference - (score / 100) * circumference;
-
-        currentAnalysis = { mint, symbol, price, pass };
-
-        document.getElementById('analyze-result').innerHTML = `
-          <div class="card result-scan">
-            <div class="card-header">
-              <div>
-                <div class="card-label">Token Analysis</div>
-                <div class="card-title">${name} <span style="color:var(--muted);font-size:0.75rem">(${symbol})</span></div>
-              </div>
-              <div style="font-size:0.6rem;color:${pass ? 'var(--green)' : 'var(--red)'}">
-                ${pass ? '✅ PASS' : '❌ FAIL'}
-              </div>
-            </div>
-
-            <!-- Score ring -->
-            <div class="score-wrap">
-              <div class="score-ring-wrap">
-                <svg class="score-ring-svg" viewBox="0 0 80 80">
-                  <circle class="score-ring-bg" cx="40" cy="40" r="32"/>
-                  <circle class="score-ring-fill" cx="40" cy="40" r="32"
-                    id="score-circle"
-                    stroke="${gradeColor}"
-                    style="stroke-dashoffset:${offset}"/>
-                </svg>
-                <div class="score-center">
-                  <div class="score-num" style="color:${gradeColor}">${score}</div>
-                  <div class="score-label">/100</div>
-                </div>
-              </div>
-              <div class="score-info">
-                <div class="score-grade" style="color:${gradeColor}">${grade}</div>
-                <div class="score-mode">🛡️ Safety Mode</div>
-                <div class="score-verdict" style="color:${pass ? 'var(--green)' : 'var(--red)'}">
-                  ${pass ? 'Filters passed — safe to snipe' : fails.length + ' filter(s) failed'}
-                </div>
-              </div>
-            </div>
-
-            <!-- Breakdown -->
-            <div style="margin-bottom:1rem">
-              ${renderBar('Liquidity', score >= 15 ? 20 : score >= 10 ? 15 : score >= 5 ? 10 : 5, 20)}
-              ${renderBar('Buy Ratio', buyRatio >= 80 ? 15 : buyRatio >= 70 ? 12 : buyRatio >= 60 ? 8 : 4, 15)}
-              ${renderBar('Token Age', ageSecs >= 3600 ? 10 : ageSecs >= 600 ? 6 : 4, 10)}
-              ${renderBar('Bundle Chk', 10, 20)}
-              ${renderBar('Authority', 15, 15)}
-              ${renderBar('Top Holder', 5, 10)}
-            </div>
-
-            <!-- Token data -->
-            <div class="token-grid">
-              <div class="token-cell">
-                <div class="token-cell-key">Price</div>
-                <div class="token-cell-val">$${price.toFixed(8)}</div>
-              </div>
-              <div class="token-cell">
-                <div class="token-cell-key">Liquidity</div>
-                <div class="token-cell-val">$${Math.floor(liquidity).toLocaleString()}</div>
-              </div>
-              <div class="token-cell">
-                <div class="token-cell-key">Market Cap</div>
-                <div class="token-cell-val">$${Math.floor(mcap).toLocaleString()}</div>
-              </div>
-              <div class="token-cell">
-                <div class="token-cell-key">Age</div>
-                <div class="token-cell-val">${ageDisplay}</div>
-              </div>
-              <div class="token-cell">
-                <div class="token-cell-key">Buy Ratio</div>
-                <div class="token-cell-val">${buyRatio.toFixed(1)}%</div>
-              </div>
-              <div class="token-cell">
-                <div class="token-cell-key">Buys / Sells</div>
-                <div class="token-cell-val">${buys} / ${sells}</div>
-              </div>
-            </div>
-
-            ${fails.length ? `
-              <div style="margin-top:0.75rem;padding-top:0.75rem;border-top:1px solid var(--border)">
-                <div class="card-label" style="margin-bottom:0.5rem;color:var(--red)">Failed Filters</div>
-                ${fails.map(f => `<div class="filter-fail">✗ ${f}</div>`).join('')}
-              </div>
-            ` : ''}
-          </div>
-
-          <div class="action-bar">
-            <button class="action-btn primary" onclick="sendSnipe('${mint}', '${symbol}')" ${!pass ? 'disabled' : ''}>
-              🚀 Snipe ${symbol}
-            </button>
-            <button class="action-btn secondary" onclick="openChart('${pair.url || ''}')">
-              📊 Chart
-            </button>
-          </div>
-        `;
-
-      } catch (err) {
-        document.getElementById('analyze-result').innerHTML = `
-          <div class="empty">
-            <div class="empty-icon">⚠️</div>
-            <div class="empty-text">Analysis failed.<br/>${err.message}</div>
-          </div>
-        `;
-      }
-
-      btn.disabled = false;
-      btn.textContent = 'SCAN';
+    } catch (err) {
+      document.getElementById('analyze-result').innerHTML =
+        `<div class="empty"><div class="empty-icon">⚠️</div><div class="empty-text">Analysis failed.<br/>${err.message}</div></div>`;
     }
 
-    function renderBar(label, val, max) {
-      const pct = Math.min(100, (val / max) * 100);
+    btn.disabled = false; btn.textContent = 'SCAN';
+  }
+
+  function renderBar(label, val, max) {
+    const pct = Math.min(100, (val / max) * 100);
+    return `
+      <div class="breakdown-row">
+        <div class="breakdown-label">${label}</div>
+        <div class="breakdown-track"><div class="breakdown-fill" style="width:${pct}%"></div></div>
+        <div class="breakdown-val">${val}/${max}</div>
+      </div>`;
+  }
+
+  function sendSnipe(mint, symbol) {
+    if (tg) {
+      tg.sendData(JSON.stringify({ cmd: 'snipe', mint, symbol }));
+      showToast('🛸 Snipe sent to bot', 'success');
+    } else {
+      showToast('⚠️ Open inside Telegram to snipe', 'error');
+    }
+  }
+
+  function openChart(url) {
+    if (url && tg) tg.openLink(url);
+    else if (url) window.open(url, '_blank');
+  }
+
+  // ── Settings ──────────────────────────────────────────────────
+  function updateSetting(key, val) {
+    const map = {
+      liq:       { id: 'liq-val',       fmt: v => parseInt(v).toLocaleString() },
+      buyratio:  { id: 'buyratio-val',  fmt: v => parseInt(v) },
+      topholder: { id: 'topholder-val', fmt: v => parseInt(v) },
+      age:       { id: 'age-val',       fmt: v => parseInt(v) },
+      buy:       { id: 'buy-val',       fmt: v => parseFloat(v).toFixed(2) },
+      tp:        { id: 'tp-val',        fmt: v => parseInt(v) },
+      sl:        { id: 'sl-val',        fmt: v => parseInt(v) },
+    };
+    const m = map[key];
+    if (m) document.getElementById(m.id).textContent = m.fmt(val);
+  }
+
+  function saveSettings() {
+    const settings = {
+      cmd: 'settings_update',
+      minLiquidity:        parseInt(document.getElementById('liq-slider').value),
+      minBuyRatio:         parseInt(document.getElementById('buyratio-slider').value),
+      maxTopHolderPercent: parseInt(document.getElementById('topholder-slider').value),
+      minTokenAgeSecs:     parseInt(document.getElementById('age-slider').value),
+      buyAmountSol:        parseFloat(document.getElementById('buy-slider').value),
+      takeProfitPercent:   parseInt(document.getElementById('tp-slider').value),
+      stopLossPercent:     parseInt(document.getElementById('sl-slider').value),
+    };
+    if (tg) {
+      tg.sendData(JSON.stringify(settings));
+      showToast('✅ Settings saved to bot', 'success');
+    } else {
+      showToast('⚠️ Open inside Telegram to save', 'error');
+    }
+  }
+
+  // ── History ───────────────────────────────────────────────────
+  async function loadHistory() {
+    const data = await fetchAPI('/history');
+
+    if (!data?.success) {
+      document.getElementById('history-list').innerHTML =
+        '<div class="empty"><div class="empty-icon">⚠️</div><div class="empty-text">Could not load history</div></div>';
+      return;
+    }
+
+    const stats = data.stats;
+    if (stats) {
+      document.getElementById('hist-winrate').textContent = stats.winRate ? stats.winRate + '%' : '—';
+      document.getElementById('hist-trades').textContent = stats.trades || 0;
+      const pnl = parseFloat(stats.totalPnlSol || 0);
+      document.getElementById('hist-pnl').textContent = (pnl >= 0 ? '+' : '') + pnl.toFixed(2);
+      document.getElementById('hist-pnl').className = 'stat-cell-val ' + (pnl >= 0 ? 'green' : 'red');
+    }
+
+    if (!data.trades?.length) {
+      document.getElementById('history-list').innerHTML =
+        '<div class="empty"><div class="empty-icon">📊</div><div class="empty-text">No closed trades yet</div></div>';
+      return;
+    }
+
+    document.getElementById('history-list').innerHTML = data.trades.map(t => {
+      const pnl = t.pnlPercent || 0;
+      const score = t.convictionScore || 0;
+      const gradeClass = score >= 80 ? 's' : score >= 65 ? 'a' : score >= 50 ? 'b' : 'd';
+      const date = t.closedAt ? new Date(t.closedAt).toLocaleDateString() : '—';
       return `
-        <div class="breakdown-row">
-          <div class="breakdown-label">${label}</div>
-          <div class="breakdown-track">
-            <div class="breakdown-fill" style="width:${pct}%"></div>
-          </div>
-          <div class="breakdown-val">${val}/${max}</div>
-        </div>
-      `;
-    }
-
-    function sendSnipe(mint, symbol) {
-      if (tg) {
-        tg.sendData(JSON.stringify({ cmd: 'snipe', mint, symbol }));
-        showToast('🛸 Snipe sent to bot', 'success');
-      } else {
-        showToast('⚠️ Open inside Telegram to snipe', 'error');
-      }
-    }
-
-    function openChart(url) {
-      if (url && tg) tg.openLink(url);
-      else if (url) window.open(url, '_blank');
-    }
-
-    // ── Settings ──────────────────────────────────────────────────
-    function updateSetting(key, val) {
-      const map = {
-        liq: { id: 'liq-val', fmt: v => parseInt(v).toLocaleString() },
-        buyratio: { id: 'buyratio-val', fmt: v => parseInt(v) },
-        topholder: { id: 'topholder-val', fmt: v => parseInt(v) },
-        age: { id: 'age-val', fmt: v => parseInt(v) },
-        buy: { id: 'buy-val', fmt: v => parseFloat(v).toFixed(2) },
-        tp: { id: 'tp-val', fmt: v => parseInt(v) },
-        sl: { id: 'sl-val', fmt: v => parseInt(v) },
-      };
-      const m = map[key];
-      if (m) document.getElementById(m.id).textContent = m.fmt(val);
-    }
-
-    function saveSettings() {
-      const settings = {
-        cmd: 'settings_update',
-        minLiquidity: parseInt(document.getElementById('liq-slider').value),
-        minBuyRatio: parseInt(document.getElementById('buyratio-slider').value),
-        maxTopHolderPercent: parseInt(document.getElementById('topholder-slider').value),
-        minTokenAgeSecs: parseInt(document.getElementById('age-slider').value),
-        buyAmountSol: parseFloat(document.getElementById('buy-slider').value),
-        takeProfitPercent: parseInt(document.getElementById('tp-slider').value),
-        stopLossPercent: parseInt(document.getElementById('sl-slider').value),
-      };
-
-      if (tg) {
-        tg.sendData(JSON.stringify(settings));
-        showToast('✅ Settings saved to bot', 'success');
-      } else {
-        showToast('⚠️ Open inside Telegram to save', 'error');
-      }
-    }
-
-    // ── History ───────────────────────────────────────────────────
-    function loadHistory() {
-      const wins = mockHistory.filter(t => t.pnl > 0).length;
-      const total = mockHistory.length;
-      const totalPnl = mockHistory.reduce((s, t) => s + t.pnlSol, 0);
-
-      document.getElementById('hist-winrate').textContent = ((wins/total)*100).toFixed(0) + '%';
-      document.getElementById('hist-winrate').className = 'stat-cell-val green';
-      document.getElementById('hist-trades').textContent = total;
-      document.getElementById('hist-pnl').textContent = (totalPnl >= 0 ? '+' : '') + totalPnl.toFixed(2);
-      document.getElementById('hist-pnl').className = 'stat-cell-val ' + (totalPnl >= 0 ? 'green' : 'red');
-
-      document.getElementById('history-list').innerHTML = mockHistory.map(t => `
         <div class="trade-row">
           <div class="trade-left">
             <div class="trade-symbol">
               ${t.symbol}
-              <span class="score-badge ${t.grade}">${t.score}</span>
+              ${score ? `<span class="score-badge ${gradeClass}">${score}</span>` : ''}
             </div>
-            <div class="trade-meta">${t.date}</div>
+            <div class="trade-meta">${date}</div>
           </div>
           <div class="trade-right">
-            <div class="trade-pnl ${t.pnl >= 0 ? 'green' : 'red'}">${t.pnl >= 0 ? '+' : ''}${t.pnl.toFixed(1)}%</div>
-            <div class="trade-reason">${t.reason.replace('_', ' ')}</div>
+            <div class="trade-pnl ${pnl >= 0 ? 'green' : 'red'}">${pnl >= 0 ? '+' : ''}${pnl.toFixed(1)}%</div>
+            <div class="trade-reason">${t.exitReason?.replace('_', ' ') || '—'}</div>
           </div>
-        </div>
-      `).join('');
-    }
+        </div>`;
+    }).join('');
+  }
 
-    // ── Toast ─────────────────────────────────────────────────────
-    let toastTimer;
-    function showToast(msg, type = '') {
-      const el = document.getElementById('toast');
-      el.textContent = msg;
-      el.className = 'toast show ' + type;
-      clearTimeout(toastTimer);
-      toastTimer = setTimeout(() => { el.className = 'toast'; }, 2800);
-    }
+  // ── Toast ─────────────────────────────────────────────────────
+  let toastTimer;
+  function showToast(msg, type = '') {
+    const el = document.getElementById('toast');
+    el.textContent = msg;
+    el.className = 'toast show ' + type;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => { el.className = 'toast'; }, 2800);
+  }
 
-    // ── Migration counter simulation ──────────────────────────────
-    setInterval(() => {
-      migrationsSeen += Math.floor(Math.random() * 3);
-      const el = document.getElementById('migrations-seen');
-      if (el) el.textContent = migrationsSeen;
-    }, 8000);
-
-    // ── Init ──────────────────────────────────────────────────────
-    loadDashboard();
+  // ── Init ──────────────────────────────────────────────────────
+  loadDashboard();
+  setInterval(loadDashboard, 30000);
   </script>
 </body>
 </html>
