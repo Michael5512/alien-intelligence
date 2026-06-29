@@ -151,15 +151,33 @@ cron.schedule('*/60 * * * * *', async () => {
   try {
     // Fetch latest Solana pairs from DexScreener
     const res = await axios.get(
-      'https://api.dexscreener.com/latest/dex/tokens/So11111111111111111111111111111111111111112',
-      { timeout: 8000 }
-    );
+  `https://api.helius.xyz/v0/addresses/675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8/transactions?api-key=${CONFIG.HELIUS_API_KEY}&limit=50&type=SWAP`,
+  { timeout: 8000 }
+);
 
-    const pairs = res.data?.pairs || [];
-    if (!pairs.length) {
-      console.log('[autosnipe] No pairs returned from DexScreener');
-      return;
+const txs = res.data || [];
+const seenMints = new Set();
+const pairs = [];
+
+for (const tx of txs) {
+  for (const transfer of (tx.tokenTransfers || [])) {
+    const mint = transfer.mint;
+    const skipMints = [
+      'So11111111111111111111111111111111111111112',
+      'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v',
+      'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB',
+    ];
+    if (mint && !seenMints.has(mint) && !skipMints.includes(mint)) {
+      seenMints.add(mint);
+      pairs.push({ baseToken: { address: mint } });
     }
+  }
+}
+
+if (!pairs.length) {
+  console.log('[autosnipe] No new tokens from Helius');
+  return;
+}
 
     console.log(`[autosnipe] Checking ${pairs.length} pairs...`);
     let passed = 0;
