@@ -1,7 +1,9 @@
 require('dotenv').config();
+const express = require('express');
 const { Telegraf } = require('telegraf');
 const mongoose = require('mongoose');
 const cron = require('node-cron');
+const axios = require('axios');
 const CONFIG = require('./utils/config');
 const { setupCommands } = require('./bot/commands');
 const { monitorPosition, activePositions, sellToken } = require('./sniper/solana');
@@ -10,6 +12,7 @@ const { checkDevWallets, startDevWatch } = require('./sniper/devwatch');
 const { startMigrationListener, stopMigrationListener } = require('./sniper/migration');
 const { logEntry, logExit } = require('./db/tradeHistory');
 const { scoreToken } = require('./sniper/scorer');
+const apiRouter = require('./api/server');
 
 // ── Validate env ──────────────────────────────────────────────────
 const required = ['TELEGRAM_TOKEN', 'OWNER_TELEGRAM_ID', 'HELIUS_API_KEY', 'OWNER_PRIVATE_KEY'];
@@ -39,7 +42,6 @@ async function notifyOwner(message) {
 // ── Migration handler ─────────────────────────────────────────────
 async function handleMigration(token) {
   if (!getAutoSnipeEnabled()) {
-    // Just notify, don't snipe
     return notifyOwner(
       `🚀 *MIGRATION DETECTED* — ${token.symbol}\n` +
       `Auto-snipe is OFF. Use /snipe ${token.mint} to enter.\n` +
@@ -74,11 +76,11 @@ async function handleMigration(token) {
     mintAuthorityRevoked: true,
     freezeAuthorityRevoked: true,
     topHolderPercent: 0,
-  }, 'momentum'); // momentum mode for migrations
+  }, 'momentum');
 
   await notifyOwner(
     `✅ Filters passed — ${token.symbol}\n` +
-    `Conviction: ${score.score}/100 ${score.emoji} (Momentum)\n` +
+    `Conviction: ${score.score}/100 ${score.emoji}\n` +
     `Executing ${CONFIG.DEFAULT_FILTERS.buyAmountSol} SOL snipe...`
   );
 
@@ -147,7 +149,6 @@ cron.schedule('*/60 * * * * *', async () => {
   if (!getAutoSnipeEnabled()) return;
 
   try {
-    const axios = require('axios');
     const res = await axios.get(
       'https://api.dexscreener.com/latest/dex/pairs/solana',
       { timeout: 8000 }
@@ -232,6 +233,24 @@ cron.schedule('*/60 * * * * *', async () => {
   }
 });
 
+// ── API Server ────────────────────────────────────────────────────
+function startApiServer() {
+  const app = express();
+  app.use(express.json());
+  app.use('/api', apiRouter);
+
+  // Expose autoSnipeEnabled globally for API
+  Object.defineProperty(global, 'autoSnipeEnabled', {
+    get: () => getAutoSnipeEnabled(),
+    configurable: true,
+  });
+
+  const PORT = process.env.PORT || 3000;
+  app.listen(PORT, () => {
+    console.log(`[api] ✅ API server running on port ${PORT}`);
+  });
+}
+
 // ── MongoDB ───────────────────────────────────────────────────────
 async function connectDB() {
   if (!CONFIG.MONGODB_URI) {
@@ -249,9 +268,10 @@ async function connectDB() {
 // ── Launch ────────────────────────────────────────────────────────
 async function main() {
   await connectDB();
+
   bot.launch({ dropPendingUpdates: true });
 
-  // Start WebSocket migration listener
+  startApiServer();
   startMigrationListener(handleMigration);
 
   console.log(`[boot] ✅ Alien Intelligence — Phase ${CONFIG.PHASE} online`);
@@ -266,8 +286,9 @@ async function main() {
     `✅ Bundle buy detector\n` +
     `✅ Dev wallet tracker\n` +
     `✅ Migration listener (WebSocket ⚡)\n` +
-    `✅ Conviction scoring (Safety + Momentum)\n` +
-    `✅ Trade history\n\n` +
+    `✅ Conviction scoring\n` +
+    `✅ Trade history\n` +
+    `✅ API server active\n\n` +
     `Type /start for commands.`
   );
 }
