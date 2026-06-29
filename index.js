@@ -149,22 +149,32 @@ cron.schedule('*/60 * * * * *', async () => {
   if (!getAutoSnipeEnabled()) return;
 
   try {
+    // Fetch latest Solana pairs from DexScreener
     const res = await axios.get(
-      'https://api.dexscreener.com/token-profiles/latest/v1',
+      'https://api.dexscreener.com/latest/dex/pairs/solana',
       { timeout: 8000 }
     );
 
-    const pairs = res.data || [];
-    if (!Array.isArray(pairs)) return;
+    const pairs = res.data?.pairs || [];
+    if (!pairs.length) {
+      console.log('[autosnipe] No pairs returned from DexScreener');
+      return;
+    }
+
+    console.log(`[autosnipe] Checking ${pairs.length} pairs...`);
+    let passed = 0;
 
     for (const pair of pairs) {
-      const mint = pair.tokenAddress;
+      const mint = pair.baseToken?.address;
       if (!mint || seenPairs.has(mint)) continue;
-      if (pair.chainId !== 'solana') continue;
       seenPairs.add(mint);
 
+      // Run filters
       const { pass, data } = await runFilters(mint);
       if (!pass) continue;
+
+      passed++;
+      console.log(`[autosnipe] ✅ ${data.symbol} passed filters`);
 
       const score = await scoreToken(mint, {
         liquidity: data.liquidity,
@@ -220,10 +230,13 @@ cron.schedule('*/60 * * * * *', async () => {
           );
         })
         .catch(err => {
-          notifyOwner(`❌ Auto-snipe failed: ${err.message}`);
+          notifyOwner(`❌ Auto-snipe failed for ${data.symbol}: ${err.message}`);
         });
     }
 
+    console.log(`[autosnipe] Cycle done — ${passed} passed filters`);
+
+    // Prune seen pairs
     if (seenPairs.size > 1000) {
       const arr = [...seenPairs];
       seenPairs = new Set(arr.slice(arr.length - 500));
