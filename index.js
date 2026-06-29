@@ -150,18 +150,18 @@ cron.schedule('*/60 * * * * *', async () => {
 
   try {
     const res = await axios.get(
-      'https://api.dexscreener.com/latest/dex/pairs/solana',
+      'https://api.dexscreener.com/token-profiles/latest/v1',
       { timeout: 8000 }
     );
-    const pairs = res.data?.pairs || [];
+
+    const pairs = res.data || [];
+    if (!Array.isArray(pairs)) return;
 
     for (const pair of pairs) {
-      const mint = pair.baseToken?.address;
+      const mint = pair.tokenAddress;
       if (!mint || seenPairs.has(mint)) continue;
+      if (pair.chainId !== 'solana') continue;
       seenPairs.add(mint);
-
-      const ageMs = Date.now() - (pair.pairCreatedAt || 0);
-      if (ageMs > 10 * 60 * 1000) continue;
 
       const { pass, data } = await runFilters(mint);
       if (!pass) continue;
@@ -224,7 +224,7 @@ cron.schedule('*/60 * * * * *', async () => {
         });
     }
 
-    if (seenPairs.size > 500) {
+    if (seenPairs.size > 1000) {
       const arr = [...seenPairs];
       seenPairs = new Set(arr.slice(arr.length - 500));
     }
@@ -239,7 +239,6 @@ function startApiServer() {
   app.use(express.json());
   app.use('/api', apiRouter);
 
-  // Expose autoSnipeEnabled globally for API
   global.getAutoSnipeEnabled = getAutoSnipeEnabled;
 
   const PORT = process.env.PORT || 3000;
