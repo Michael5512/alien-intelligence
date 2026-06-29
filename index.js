@@ -151,7 +151,7 @@ cron.schedule('*/60 * * * * *', async () => {
   try {
     // Fetch latest Solana pairs from DexScreener
     const res = await axios.get(
-      'https://api.dexscreener.com/latest/dex/pairs/solana',
+      'https://api.dexscreener.com/latest/dex/tokens/So11111111111111111111111111111111111111112',
       { timeout: 8000 }
     );
 
