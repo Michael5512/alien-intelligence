@@ -16,11 +16,13 @@ function getKeypair() {
 }
 
 const SOL_MINT = 'So11111111111111111111111111111111111111112';
+const JUP_BASE = 'https://api.jup.ag/swap/v1';
+
 const activePositions = new Map();
 
 async function getQuote(outputMint, amountSol) {
   const amountLamports = Math.floor(amountSol * 1e9);
-  const url = `https://quote-api.jup.ag/v6/quote?inputMint=${SOL_MINT}&outputMint=${outputMint}&amount=${amountLamports}&slippageBps=500`;
+  const url = `${JUP_BASE}/quote?inputMint=${SOL_MINT}&outputMint=${outputMint}&amount=${amountLamports}&slippageBps=500`;
   const res = await axios.get(url, { timeout: 10000 });
   return res.data;
 }
@@ -31,7 +33,7 @@ async function executeSwap(outputMint, amountSol) {
   const quote = await getQuote(outputMint, amountSol);
   if (!quote || !quote.outAmount) throw new Error('No quote returned from Jupiter');
 
-  const swapRes = await axios.post('https://quote-api.jup.ag/v6/swap', {
+  const swapRes = await axios.post(`${JUP_BASE}/swap`, {
     quoteResponse: quote,
     userPublicKey: keypair.publicKey.toString(),
     wrapAndUnwrapSol: true,
@@ -59,11 +61,11 @@ async function executeSwap(outputMint, amountSol) {
 async function sellToken(mintAddress, tokenAmount) {
   const keypair = getKeypair();
 
-  const url = `https://quote-api.jup.ag/v6/quote?inputMint=${mintAddress}&outputMint=${SOL_MINT}&amount=${tokenAmount}&slippageBps=800`;
+  const url = `${JUP_BASE}/quote?inputMint=${mintAddress}&outputMint=${SOL_MINT}&amount=${tokenAmount}&slippageBps=800`;
   const quote = (await axios.get(url, { timeout: 10000 })).data;
   if (!quote || !quote.outAmount) throw new Error('No sell quote from Jupiter');
 
-  const swapRes = await axios.post('https://quote-api.jup.ag/v6/swap', {
+  const swapRes = await axios.post(`${JUP_BASE}/swap`, {
     quoteResponse: quote,
     userPublicKey: keypair.publicKey.toString(),
     wrapAndUnwrapSol: true,
@@ -113,7 +115,8 @@ async function monitorPosition(mintAddress, notifyFn) {
       notifyFn(
         `🟢 *TAKE PROFIT HIT* — ${pos.symbol}\n` +
         `+${changePct.toFixed(1)}% | Entry: $${pos.entryPrice.toFixed(8)} → Now: $${currentPrice.toFixed(8)}\n` +
-        `✅ Sold | TX: \`${txid}\``
+        `✅ Sold | TX: \`${txid}\``,
+        { reason: 'take_profit', exitPrice: currentPrice, solReturned: pos.solSpent * (1 + changePct / 100), txid }
       );
     } catch (err) {
       notifyFn(`⚠️ TP sell failed for ${pos.symbol}: ${err.message}`);
@@ -128,7 +131,8 @@ async function monitorPosition(mintAddress, notifyFn) {
       notifyFn(
         `🔴 *STOP LOSS HIT* — ${pos.symbol}\n` +
         `${changePct.toFixed(1)}% | Entry: $${pos.entryPrice.toFixed(8)} → Now: $${currentPrice.toFixed(8)}\n` +
-        `✅ Sold | TX: \`${txid}\``
+        `✅ Sold | TX: \`${txid}\``,
+        { reason: 'stop_loss', exitPrice: currentPrice, solReturned: pos.solSpent * (1 + changePct / 100), txid }
       );
     } catch (err) {
       notifyFn(`⚠️ SL sell failed for ${pos.symbol}: ${err.message}`);
