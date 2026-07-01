@@ -1237,9 +1237,36 @@
     toastTimer = setTimeout(() => { el.className = 'toast'; }, 2800);
   }
 
-  // ── Init ──────────────────────────────────────────────────────
-  loadDashboard();
-  setInterval(loadDashboard, 30000);
+  // ── Load settings into sliders ────────────────────────────────
+async function loadSettingsIntoSliders() {
+  const data = await fetchAPI('/settings');
+  if (!data?.success) return;
+  const s = data.settings;
+
+  const map = {
+    'liq-slider':       { val: s.minLiquidity,        display: 'liq-val',       fmt: v => parseInt(v).toLocaleString() },
+    'buyratio-slider':  { val: s.minBuyRatio,          display: 'buyratio-val',  fmt: v => parseInt(v) },
+    'topholder-slider': { val: s.maxTopHolderPercent,  display: 'topholder-val', fmt: v => parseInt(v) },
+    'age-slider':       { val: s.minTokenAgeSecs,      display: 'age-val',       fmt: v => parseInt(v) },
+    'buy-slider':       { val: s.buyAmountSol,         display: 'buy-val',       fmt: v => parseFloat(v).toFixed(2) },
+    'tp-slider':        { val: s.takeProfitPercent,    display: 'tp-val',        fmt: v => parseInt(v) },
+    'sl-slider':        { val: s.stopLossPercent,      display: 'sl-val',        fmt: v => parseInt(v) },
+  };
+
+  for (const [sliderId, config] of Object.entries(map)) {
+    const slider = document.getElementById(sliderId);
+    const display = document.getElementById(config.display);
+    if (slider && config.val !== undefined) {
+      slider.value = config.val;
+      if (display) display.textContent = config.fmt(config.val);
+    }
+  }
+}
+
+// ── Init ──────────────────────────────────────────────────────
+loadDashboard();
+loadSettingsIntoSliders();
+setInterval(loadDashboard, 30000);
   </script>
 </body>
 </html>
