@@ -3,9 +3,9 @@ const router = express.Router();
 const { activePositions } = require('../sniper/solana');
 const { devWatches } = require('../sniper/devwatch');
 const { getCurrentPrice } = require('../sniper/solana');
-const { getStats, getRecentTrades } = require('../db/tradeHistory');
+const { getStats, getRecentTrades, loadSettings } = require('../db/tradeHistory');
 
-// ── CORS middleware ───────────────────────────────────────────────
+// ── CORS ──────────────────────────────────────────────────────────
 router.use((req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET');
@@ -17,15 +17,12 @@ router.use((req, res, next) => {
 router.get('/positions', async (req, res) => {
   try {
     const positions = [];
-
     for (const [mint, pos] of activePositions) {
       const currentPrice = await getCurrentPrice(mint);
       const change = currentPrice && pos.entryPrice
         ? ((currentPrice - pos.entryPrice) / pos.entryPrice * 100)
         : null;
-
       const devWatch = devWatches.get(mint);
-
       positions.push({
         mint,
         symbol: pos.symbol,
@@ -48,7 +45,6 @@ router.get('/positions', async (req, res) => {
         } : { active: false },
       });
     }
-
     res.json({ success: true, count: positions.length, positions });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -60,7 +56,6 @@ router.get('/history', async (req, res) => {
   try {
     const recent = await getRecentTrades(10);
     const stats = await getStats();
-
     res.json({
       success: true,
       stats,
@@ -96,13 +91,25 @@ router.get('/stats', async (req, res) => {
   }
 });
 
+// ── GET /api/settings ─────────────────────────────────────────────
+router.get('/settings', async (req, res) => {
+  try {
+    const saved = await loadSettings();
+    const CONFIG = require('../utils/config');
+
+    // Merge saved settings over defaults
+    const settings = { ...CONFIG.DEFAULT_FILTERS, ...saved };
+
+    res.json({ success: true, settings });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // ── GET /api/spots ────────────────────────────────────────────────
-// Tracks early bird spots — stored in MongoDB via a simple counter
 router.get('/spots', async (req, res) => {
   try {
     const mongoose = require('mongoose');
-
-    // Simple spots counter schema
     let SpotsModel;
     try {
       SpotsModel = mongoose.model('Spots');
@@ -114,12 +121,8 @@ router.get('/spots', async (req, res) => {
       });
       SpotsModel = mongoose.model('Spots', spotsSchema);
     }
-
     let spots = await SpotsModel.findOne({ tier: 'earlybird' });
-    if (!spots) {
-      spots = await SpotsModel.create({ tier: 'earlybird', claimed: 0, total: 50 });
-    }
-
+    if (!spots) spots = await SpotsModel.create({ tier: 'earlybird', claimed: 0, total: 50 });
     res.json({
       success: true,
       claimed: spots.claimed,
