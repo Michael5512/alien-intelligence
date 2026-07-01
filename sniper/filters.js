@@ -8,7 +8,7 @@ async function getTokenMeta(mintAddress) {
       id: 'alien-meta',
       method: 'getAsset',
       params: { id: mintAddress },
-    });
+    }, { timeout: 8000 });
     return res.data?.result || null;
   } catch (err) {
     console.error('[filters] getTokenMeta error:', err.message);
@@ -35,62 +35,18 @@ async function getDexData(mintAddress) {
   }
 }
 
-/**
- * Get real holder count via Helius getTokenAccounts
- * Returns actual total, not capped at 20
- */
-async function getRealHolderCount(mintAddress) {
-  try {
-    let page = 1;
-    let totalHolders = 0;
-
-    while (true) {
-      const res = await axios.post(
-        `https://mainnet.helius-rpc.com/?api-key=${CONFIG.HELIUS_API_KEY}`,
-        {
-          jsonrpc: '2.0',
-          id: `holders-${page}`,
-          method: 'getTokenAccounts',
-          params: {
-            mint: mintAddress,
-            limit: 1000,
-            page,
-          },
-        },
-        { timeout: 10000 }
-      );
-
-      const accounts = res.data?.result?.token_accounts || [];
-      // Only count accounts with balance > 0
-      const active = accounts.filter(a => a.amount && Number(a.amount) > 0);
-      totalHolders += active.length;
-
-      // If less than 1000 returned, we've hit the end
-      if (accounts.length < 1000) break;
-
-      // Safety cap — don't paginate forever
-      if (page >= 10) break;
-      page++;
-    }
-
-    return totalHolders;
-  } catch (err) {
-    console.error('[filters] getRealHolderCount error:', err.message);
-    return 0;
-  }
-}
-
-/**
- * Get top holder percentage using getTokenLargestAccounts
- */
 async function getTopHolderPercent(mintAddress) {
   try {
+    // Add small delay to reduce rate limit pressure
+    await new Promise(r => setTimeout(r, 500));
+
     const res = await axios.post(CONFIG.HELIUS_RPC, {
       jsonrpc: '2.0',
       id: 'top-holders',
       method: 'getTokenLargestAccounts',
       params: [mintAddress],
-    });
+    }, { timeout: 8000 });
+
     const accounts = res.data?.result?.value || [];
     if (!accounts.length) return 0;
     const totalSupply = accounts.reduce((s, h) => s + Number(h.amount), 0);
@@ -107,10 +63,10 @@ async function runFilters(mintAddress, userFilters = {}) {
   const reasons = [];
   const warnings = [];
 
-  const [dex, meta, holderCount, topHolderPercent] = await Promise.all([
+  // ── Fetch DEX data and meta in parallel ──────────────────────
+  const [dex, meta, topHolderPercent] = await Promise.all([
     getDexData(mintAddress),
     getTokenMeta(mintAddress),
-    getRealHolderCount(mintAddress),
     getTopHolderPercent(mintAddress),
   ]);
 
@@ -134,6 +90,11 @@ async function runFilters(mintAddress, userFilters = {}) {
   const buyRatio = totalTxns > 0 ? (buys / totalTxns) * 100 : 0;
   const tokenAgeSecs = pairCreatedAt ? (Date.now() - pairCreatedAt) / 1000 : 0;
 
+  // ── Use fixed holder count to save Helius credits ─────────────
+  // Real holder count API call disabled to prevent rate limiting
+  // Will re-enable when on paid Helius plan
+  const holderCount = 100; // neutral value — passes min holder check
+
   // ── Filter checks ─────────────────────────────────────────────
   if (liquidity < filters.minLiquidity)
     reasons.push(`❌ Liquidity $${liquidity.toFixed(0)} < min $${filters.minLiquidity}`);
@@ -152,9 +113,6 @@ async function runFilters(mintAddress, userFilters = {}) {
 
   if (topHolderPercent > filters.maxTopHolderPercent)
     reasons.push(`❌ Top holder ${topHolderPercent.toFixed(1)}% > max ${filters.maxTopHolderPercent}%`);
-
-  if (holderCount < filters.minHolderCount)
-    warnings.push(`⚠️ Only ${holderCount} holders (min ${filters.minHolderCount})`);
 
   if (meta) {
     if (filters.mintAuthorityRevoked && meta.mintAuthority)
