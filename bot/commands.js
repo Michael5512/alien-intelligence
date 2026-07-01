@@ -9,11 +9,26 @@ const {
 } = require('../sniper/solana');
 const { startDevWatch, stopDevWatch, devWatches } = require('../sniper/devwatch');
 const { scoreToken, formatScore } = require('../sniper/scorer');
-const { getStats, getRecentTrades, logEntry } = require('../db/tradeHistory');
+const { getStats, getRecentTrades, logEntry, saveSetting, loadSettings, saveAllSettings } = require('../db/tradeHistory');
 
 const watchlist = new Set();
 let autoSnipeEnabled = false;
 let userSettings = { ...CONFIG.DEFAULT_FILTERS };
+
+// ── Load persisted settings from MongoDB on boot ──────────────────
+async function initSettings() {
+  try {
+    const saved = await loadSettings();
+    if (Object.keys(saved).length > 0) {
+      userSettings = { ...CONFIG.DEFAULT_FILTERS, ...saved };
+      console.log('[settings] ✅ Loaded persisted settings from MongoDB');
+    } else {
+      console.log('[settings] No saved settings — using defaults');
+    }
+  } catch (err) {
+    console.error('[settings] Failed to load:', err.message);
+  }
+}
 
 function ownerOnly(ctx, next) {
   const userId = String(ctx.from?.id);
@@ -139,7 +154,6 @@ function setupCommands(bot) {
     await executeSnipe(ctx, mint);
   });
 
-  // Inline button snipe
   bot.action(/^snipe_(.+)$/, ownerOnly, async (ctx) => {
     const mint = ctx.match[1];
     await ctx.answerCbQuery('Executing snipe...');
@@ -421,7 +435,7 @@ function setupCommands(bot) {
   });
 
   // ── /set <key> <value> ───────────────────────────────────────
-  bot.command('set', ownerOnly, (ctx) => {
+  bot.command('set', ownerOnly, async (ctx) => {
     const parts = ctx.message.text.split(' ');
     const key = parts[1]?.trim();
     const value = parts[2]?.trim();
@@ -441,12 +455,15 @@ function setupCommands(bot) {
       const num = parseFloat(value);
       if (isNaN(num)) return ctx.reply(`❌ "${value}" is not a valid number`);
       userSettings[key] = num;
-      return ctx.reply(`✅ ${key} set to ${num}`);
+      await saveSetting(key, num);
+      return ctx.reply(`✅ ${key} set to ${num} (saved)`);
     }
 
     if (boolKeys.includes(key)) {
-      userSettings[key] = value === 'true';
-      return ctx.reply(`✅ ${key} set to ${value === 'true'}`);
+      const bool = value === 'true';
+      userSettings[key] = bool;
+      await saveSetting(key, bool);
+      return ctx.reply(`✅ ${key} set to ${bool} (saved)`);
     }
 
     ctx.reply(`❌ Unknown setting key: ${key}`);
@@ -480,7 +497,6 @@ function setupCommands(bot) {
 
     const cmd = data.cmd;
 
-    // Auto-snipe toggle
     if (cmd === 'autoon') {
       autoSnipeEnabled = true;
       return ctx.replyWithMarkdown(
@@ -495,7 +511,6 @@ function setupCommands(bot) {
       return ctx.replyWithMarkdown('🔴 *Auto-snipe OFF* via Dashboard');
     }
 
-    // Snipe from Mini App
     if (cmd === 'snipe' && data.mint) {
       await ctx.replyWithMarkdown(
         `🛸 *Snipe initiated from Dashboard*\n\n` +
@@ -506,17 +521,22 @@ function setupCommands(bot) {
       return;
     }
 
-    // Settings update from Mini App
     if (cmd === 'settings_update') {
       const updates = [];
+      const numericKeys = [
+        'minLiquidity', 'minBuyRatio', 'maxTopHolderPercent',
+        'minTokenAgeSecs', 'buyAmountSol', 'takeProfitPercent', 'stopLossPercent',
+      ];
 
-      if (data.minLiquidity)        { userSettings.minLiquidity = data.minLiquidity; updates.push(`Min Liquidity → $${data.minLiquidity.toLocaleString()}`); }
-      if (data.minBuyRatio)         { userSettings.minBuyRatio = data.minBuyRatio; updates.push(`Min Buy Ratio → ${data.minBuyRatio}%`); }
-      if (data.maxTopHolderPercent) { userSettings.maxTopHolderPercent = data.maxTopHolderPercent; updates.push(`Max Top Holder → ${data.maxTopHolderPercent}%`); }
-      if (data.minTokenAgeSecs)     { userSettings.minTokenAgeSecs = data.minTokenAgeSecs; updates.push(`Min Token Age → ${data.minTokenAgeSecs}s`); }
-      if (data.buyAmountSol)        { userSettings.buyAmountSol = data.buyAmountSol; updates.push(`Buy Amount → ${data.buyAmountSol} SOL`); }
-      if (data.takeProfitPercent)   { userSettings.takeProfitPercent = data.takeProfitPercent; updates.push(`Take Profit → +${data.takeProfitPercent}%`); }
-      if (data.stopLossPercent)     { userSettings.stopLossPercent = data.stopLossPercent; updates.push(`Stop Loss → -${data.stopLossPercent}%`); }
+      for (const key of numericKeys) {
+        if (data[key] !== undefined) {
+          userSettings[key] = data[key];
+          updates.push(`${key} → ${data[key]}`);
+        }
+      }
+
+      // Save all to MongoDB
+      await saveAllSettings(userSettings);
 
       return ctx.replyWithMarkdown(
         `⚙️ *Settings updated via Dashboard*\n\n` +
@@ -527,7 +547,7 @@ function setupCommands(bot) {
     ctx.reply('❓ Unknown Mini App command: ' + cmd);
   });
 
-  // ── Catch unknown commands ───────────────────────────────────
+  // ── Catch unknown ─────────────────────────────────────────────
   bot.on('text', ownerOnly, (ctx) => {
     ctx.reply('❓ Unknown command. Try /start for the full command list.');
   });
@@ -535,6 +555,8 @@ function setupCommands(bot) {
   return {
     getAutoSnipeEnabled: () => autoSnipeEnabled,
     getWatchlist: () => watchlist,
+    initSettings,
+    getUserSettings: () => userSettings,
   };
 }
 
