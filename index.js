@@ -25,7 +25,7 @@ for (const key of required) {
 
 // ── Bot init ──────────────────────────────────────────────────────
 const bot = new Telegraf(CONFIG.TELEGRAM_TOKEN);
-const { getAutoSnipeEnabled } = setupCommands(bot);
+const { getAutoSnipeEnabled, initSettings } = setupCommands(bot);
 
 // ── Notify owner ─────────────────────────────────────────────────
 async function notifyOwner(message) {
@@ -142,52 +142,56 @@ cron.schedule('*/30 * * * * *', async () => {
   await checkDevWallets(activePositions, sellToken);
 });
 
-// ── Auto-snipe poller — every 60s ────────────────────────────────
+// ── Auto-snipe poller — every 3 minutes ──────────────────────────
+// Reduced from 60s to 3min to stay within Helius free tier limits
 let seenPairs = new Set();
 
-cron.schedule('*/60 * * * * *', async () => {
+cron.schedule('*/3 * * * *', async () => {
   if (!getAutoSnipeEnabled()) return;
 
   try {
-    // Fetch latest Solana pairs from DexScreener
+    // Add delay before API call
+    await new Promise(r => setTimeout(r, 2000));
+
     const res = await axios.get(
-  `https://api.helius.xyz/v0/addresses/675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8/transactions?api-key=${CONFIG.HELIUS_API_KEY}&limit=50&type=SWAP`,
-  { timeout: 8000 }
-);
+      `https://api.helius.xyz/v0/addresses/675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8/transactions?api-key=${CONFIG.HELIUS_API_KEY}&limit=25&type=SWAP`,
+      { timeout: 10000 }
+    );
 
-const txs = res.data || [];
-const seenMints = new Set();
-const pairs = [];
+    const txs = res.data || [];
+    if (!Array.isArray(txs)) return;
 
-for (const tx of txs) {
-  for (const transfer of (tx.tokenTransfers || [])) {
-    const mint = transfer.mint;
-    const skipMints = [
+    const skipMints = new Set([
       'So11111111111111111111111111111111111111112',
       'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v',
       'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB',
-    ];
-    if (mint && !seenMints.has(mint) && !skipMints.includes(mint)) {
-      seenMints.add(mint);
-      pairs.push({ baseToken: { address: mint } });
+      'mSoLzYCxHdYgdzU16g5QSh3i5K3z3KZK7ytfqcJm7So',
+    ]);
+
+    const mints = new Set();
+    for (const tx of txs) {
+      for (const transfer of (tx.tokenTransfers || [])) {
+        const mint = transfer.mint;
+        if (mint && !skipMints.has(mint) && !seenPairs.has(mint)) {
+          mints.add(mint);
+        }
+      }
     }
-  }
-}
 
-if (!pairs.length) {
-  console.log('[autosnipe] No new tokens from Helius');
-  return;
-}
+    if (!mints.size) {
+      console.log('[autosnipe] No new tokens this cycle');
+      return;
+    }
 
-    console.log(`[autosnipe] Checking ${pairs.length} pairs...`);
+    console.log(`[autosnipe] Checking ${mints.size} tokens...`);
     let passed = 0;
 
-    for (const pair of pairs) {
-      const mint = pair.baseToken?.address;
-      if (!mint || seenPairs.has(mint)) continue;
+    for (const mint of mints) {
       seenPairs.add(mint);
 
-      // Run filters
+      // Delay between each filter check to avoid rate limiting
+      await new Promise(r => setTimeout(r, 1500));
+
       const { pass, data } = await runFilters(mint);
       if (!pass) continue;
 
@@ -254,10 +258,9 @@ if (!pairs.length) {
 
     console.log(`[autosnipe] Cycle done — ${passed} passed filters`);
 
-    // Prune seen pairs
-    if (seenPairs.size > 1000) {
+    if (seenPairs.size > 2000) {
       const arr = [...seenPairs];
-      seenPairs = new Set(arr.slice(arr.length - 500));
+      seenPairs = new Set(arr.slice(arr.length - 1000));
     }
   } catch (err) {
     console.error('[autosnipe] Poll error:', err.message);
@@ -269,9 +272,7 @@ function startApiServer() {
   const app = express();
   app.use(express.json());
   app.use('/api', apiRouter);
-
   global.getAutoSnipeEnabled = getAutoSnipeEnabled;
-
   const PORT = process.env.PORT || 3000;
   app.listen(PORT, () => {
     console.log(`[api] ✅ API server running on port ${PORT}`);
@@ -281,7 +282,7 @@ function startApiServer() {
 // ── MongoDB ───────────────────────────────────────────────────────
 async function connectDB() {
   if (!CONFIG.MONGODB_URI) {
-    console.log('[db] No MONGODB_URI — running in-memory (Phase 1)');
+    console.log('[db] No MONGODB_URI — running in-memory');
     return;
   }
   try {
@@ -295,6 +296,7 @@ async function connectDB() {
 // ── Launch ────────────────────────────────────────────────────────
 async function main() {
   await connectDB();
+  await initSettings();
 
   bot.launch({ dropPendingUpdates: true });
 
@@ -303,7 +305,7 @@ async function main() {
 
   console.log(`[boot] ✅ Alien Intelligence — Phase ${CONFIG.PHASE} online`);
   console.log(`[boot] TP/SL + Dev Watch: every 30s`);
-  console.log(`[boot] Auto-snipe poller: every 60s`);
+  console.log(`[boot] Auto-snipe poller: every 3 minutes (rate-limit safe)`);
   console.log(`[boot] Migration listener: Helius WebSocket active`);
 
   await notifyOwner(
@@ -315,7 +317,9 @@ async function main() {
     `✅ Migration listener (WebSocket ⚡)\n` +
     `✅ Conviction scoring\n` +
     `✅ Trade history\n` +
-    `✅ API server active\n\n` +
+    `✅ Settings persistence\n` +
+    `✅ API server active\n` +
+    `✅ Rate-limit safe mode\n\n` +
     `Type /start for commands.`
   );
 }
