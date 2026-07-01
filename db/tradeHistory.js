@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 
+// ── Trade Schema ──────────────────────────────────────────────────
 const tradeSchema = new mongoose.Schema({
   mint: { type: String, required: true },
   symbol: { type: String, required: true },
@@ -24,6 +25,16 @@ const tradeSchema = new mongoose.Schema({
 
 const Trade = mongoose.model('Trade', tradeSchema);
 
+// ── Settings Schema ───────────────────────────────────────────────
+const settingsSchema = new mongoose.Schema({
+  key: { type: String, unique: true, required: true },
+  value: { type: mongoose.Schema.Types.Mixed },
+  updatedAt: { type: Date, default: Date.now },
+});
+
+const Settings = mongoose.model('Settings', settingsSchema);
+
+// ── Trade functions ───────────────────────────────────────────────
 async function logEntry({ mint, symbol, entryPrice, solSpent, tokenAmount, txidEntry, convictionScore }) {
   try {
     await Trade.create({
@@ -91,4 +102,48 @@ async function getRecentTrades(limit = 5) {
   }
 }
 
-module.exports = { logEntry, logExit, getStats, getRecentTrades, Trade };
+// ── Settings functions ────────────────────────────────────────────
+async function saveSetting(key, value) {
+  try {
+    await Settings.findOneAndUpdate(
+      { key },
+      { value, updatedAt: new Date() },
+      { upsert: true, new: true }
+    );
+  } catch (err) {
+    console.error('[settings] saveSetting error:', err.message);
+  }
+}
+
+async function loadSettings() {
+  try {
+    const docs = await Settings.find();
+    const out = {};
+    for (const d of docs) out[d.key] = d.value;
+    return out;
+  } catch (err) {
+    console.error('[settings] loadSettings error:', err.message);
+    return {};
+  }
+}
+
+async function saveAllSettings(settings) {
+  try {
+    const ops = Object.entries(settings).map(([key, value]) => ({
+      updateOne: {
+        filter: { key },
+        update: { $set: { value, updatedAt: new Date() } },
+        upsert: true,
+      },
+    }));
+    if (ops.length) await Settings.bulkWrite(ops);
+  } catch (err) {
+    console.error('[settings] saveAllSettings error:', err.message);
+  }
+}
+
+module.exports = {
+  logEntry, logExit, getStats, getRecentTrades,
+  saveSetting, loadSettings, saveAllSettings,
+  Trade, Settings,
+};
